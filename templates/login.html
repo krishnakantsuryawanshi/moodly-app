@@ -5,7 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Moodly Login</title>
     <meta name="theme-color" content="#ea7a4c">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='uploads/moodly-app-icon-192.png') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Grand+Hotel&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
@@ -56,6 +59,8 @@
                     <div>
                         <strong>Install Moodly</strong>
                         <p>Download the app from this screen for a cleaner laptop and mobile experience.</p>
+                        <p class="install-app-meta" data-install-size>App size: checking...</p>
+                        <p class="install-app-hint" data-install-hint>Install options are loading for your device.</p>
                     </div>
                     <button type="button" class="install-app-btn" data-install-app>Download App</button>
                 </div>

@@ -1,4 +1,4 @@
-const CACHE_NAME = "moodly-v1";
+const CACHE_NAME = "moodly-v2";
 const STATIC_ASSETS = [
   "/",
   "/login",
@@ -6,8 +6,8 @@ const STATIC_ASSETS = [
   "/static/style.css",
   "/static/app.js",
   "/static/manifest.json",
-  "/static/uploads/avatar-anay.svg",
-  "/static/uploads/avatar-riya.svg",
+  "/static/uploads/moodly-app-icon-192.png",
+  "/static/uploads/moodly-app-icon-512.png",
 ];
 
 self.addEventListener("install", (event) => {

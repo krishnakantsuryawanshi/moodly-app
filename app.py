@@ -1,4 +1,5 @@
 import os
+import re
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path
@@ -78,6 +79,30 @@ def get_current_user():
 
 def get_avatar_for_username(username):
     return (username[:1].upper() if username else "U")
+
+
+def normalize_username(value):
+    return re.sub(r"\s+", "", (value or "").strip().lower())
+
+
+def is_valid_username(username):
+    return bool(re.fullmatch(r"[a-z0-9._]{3,24}", username or ""))
+
+
+def find_user_by_username(username):
+    normalized_username = normalize_username(username)
+    if not normalized_username:
+        return None
+
+    user = get_db().users.find_one({"username": normalized_username})
+    if user:
+        return user
+
+    for candidate in get_db().users.find({}, {"_id": 0}):
+        candidate_username = normalize_username((candidate or {}).get("username", ""))
+        if candidate_username == normalized_username:
+            return candidate
+    return None
 
 
 def with_social_defaults(user):
@@ -409,6 +434,7 @@ def get_suggested_users(current_username):
             {"username": {"$ne": current_username}},
             {
                 "username": 1,
+                "created_at": 1,
                 "selected_mood": 1,
                 "avatar": 1,
                 "avatar_file_id": 1,
@@ -420,12 +446,12 @@ def get_suggested_users(current_username):
                 "friend_requests_sent": 1,
                 "friend_requests_received": 1,
             },
-        ).sort("username", 1).limit(10)
+        ).sort("created_at", -1).limit(10)
     ]
 
 
 def search_users_by_username(query, current_username, limit=8):
-    query = (query or "").strip().lower()
+    query = normalize_username(query)
     if not query:
         return []
 
@@ -586,11 +612,16 @@ def register():
             return render_template("register.html", error=mongo_error)
 
         email = request.form.get("email", "").strip().lower()
-        username = request.form.get("username", "").strip()
+        username = normalize_username(request.form.get("username", ""))
         password = request.form.get("password", "").strip()
 
         if not email or not username or not password:
             return render_template("register.html", error="Email, username, and password are required.")
+        if not is_valid_username(username):
+            return render_template(
+                "register.html",
+                error="Username 3-24 characters ka hona chahiye. Sirf lowercase letters, numbers, dot aur underscore allowed hain.",
+            )
 
         try:
             get_db().users.insert_one(
@@ -637,7 +668,7 @@ def login():
         password = request.form.get("password", "").strip()
 
         try:
-            user = get_db().users.find_one({"$or": [{"username": identity}, {"email": identity.lower()}]})
+            user = find_user_by_username(identity) or get_db().users.find_one({"email": identity.lower()})
         except PyMongoError:
             user = None
 
@@ -1105,7 +1136,7 @@ def settings():
 
     if request.method == "POST":
         new_email = request.form.get("email", "").strip().lower()
-        new_username = request.form.get("username", "").strip()
+        new_username = normalize_username(request.form.get("username", ""))
         new_bio = request.form.get("bio", "").strip()
         new_mood = request.form.get("selected_mood", "").strip()
         new_interests = request.form.getlist("interests")
@@ -1115,6 +1146,8 @@ def settings():
 
         if not new_email or not new_username:
             error = "Email and username are required."
+        elif not is_valid_username(new_username):
+            error = "Username 3-24 characters ka hona chahiye. Sirf lowercase letters, numbers, dot aur underscore allowed hain."
         elif avatar_error:
             error = avatar_error
         elif cover_error:

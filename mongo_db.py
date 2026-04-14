@@ -190,7 +190,9 @@ class LocalCollection:
     def update_one(self, query, update, upsert=False, array_filters=None):
         for index, document in enumerate(self.documents):
             if _matches(document, query):
-                self.documents[index] = self._apply_update(document, update, array_filters=array_filters)
+                updated_document = self._apply_update(document, update, array_filters=array_filters)
+                self._check_uniques(updated_document, ignore_document=document)
+                self.documents[index] = updated_document
                 self.database.save()
                 return {"matched_count": 1}
 
@@ -215,7 +217,9 @@ class LocalCollection:
         changed = False
         for index, document in enumerate(self.documents):
             if _matches(document, query):
-                self.documents[index] = self._apply_update(document, update, array_filters=array_filters)
+                updated_document = self._apply_update(document, update, array_filters=array_filters)
+                self._check_uniques(updated_document, ignore_document=document)
+                self.documents[index] = updated_document
                 matched += 1
                 changed = True
 

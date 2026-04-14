@@ -228,6 +228,13 @@ a {
     font-size: 0.92rem;
 }
 
+.install-app-meta,
+.install-app-hint {
+    margin: 4px 0 0;
+    font-size: 0.84rem;
+    color: #52607a;
+}
+
 .install-app-btn {
     border: 0;
     border-radius: 14px;
@@ -238,6 +245,11 @@ a {
     padding: 13px 16px;
     cursor: pointer;
     width: 100%;
+}
+
+.install-app-btn[disabled] {
+    cursor: default;
+    opacity: 0.7;
 }
 
 .auth-card-secondary {

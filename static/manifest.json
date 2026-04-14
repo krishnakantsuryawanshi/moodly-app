@@ -1,6 +1,7 @@
 {
   "name": "Moodly",
   "short_name": "Moodly",
+  "id": "/",
   "description": "Mood-based social app for stories, posts, and messages.",
   "start_url": "/",
   "scope": "/",
@@ -9,16 +10,16 @@
   "theme_color": "#ea7a4c",
   "icons": [
     {
-      "src": "/static/uploads/avatar-anay.svg",
+      "src": "/static/uploads/moodly-app-icon-192.png",
       "sizes": "192x192",
-      "type": "image/svg+xml",
-      "purpose": "any"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "/static/uploads/avatar-riya.svg",
+      "src": "/static/uploads/moodly-app-icon-512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
-      "purpose": "any"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
