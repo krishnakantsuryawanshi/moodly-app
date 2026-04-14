@@ -43,7 +43,13 @@ _mongo_ready_result = None
 
 
 def get_client():
-    return MongoClient(MONGO_URI, serverSelectionTimeoutMS=3000)
+    return MongoClient(
+        MONGO_URI,
+        serverSelectionTimeoutMS=3000,
+        connectTimeoutMS=3000,
+        socketTimeoutMS=3000,
+        waitQueueTimeoutMS=3000,
+    )
 
 
 def _serialize_value(value):
@@ -1150,9 +1156,10 @@ def ensure_mongo_ready():
         seed_messages()
         _mongo_ready_result = (True, None)
         return _mongo_ready_result
-    except PyMongoError as exc:
+    except Exception as exc:
         enable_local_store(
-            f"MongoDB connection failed ({get_safe_mongo_uri()}). Moodly is running on local demo data instead."
+            f"MongoDB connection failed ({get_safe_mongo_uri()}; {type(exc).__name__}: {exc}). "
+            "Moodly is running on local demo data instead."
         )
         init_mongo()
         seed_users()
