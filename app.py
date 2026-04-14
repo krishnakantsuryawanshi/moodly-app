@@ -34,7 +34,7 @@ UPLOAD_FOLDER = Path(app.config["UPLOAD_FOLDER"])
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 
 SOCIAL_DEFAULTS_SYNCED = False
-ASSET_VERSION = os.getenv("ASSET_VERSION", "2026-04-14-2")
+ASSET_VERSION = os.getenv("ASSET_VERSION", "2026-04-14-3")
 
 ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
 ALLOWED_VIDEO_EXTENSIONS = {"mp4", "mov", "webm", "mkv"}
