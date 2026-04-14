@@ -1,24 +1,38 @@
 import os
+import secrets
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from flask import Flask, redirect, render_template, request, session, url_for
+import gridfs
+from bson import ObjectId
+from bson.errors import InvalidId
+from flask import Flask, Response, abort, redirect, render_template, request, session, url_for
 from pymongo import UpdateOne
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 
-from mongo_db import ensure_mongo_ready, get_database
+import mongo_db
+from mongo_db import MONGO_DB_NAME, ensure_mongo_ready, get_database
 
 
 app = Flask(__name__)
-app.secret_key = "moodly-dev-secret-key"
+app.secret_key = os.getenv("SECRET_KEY") or os.getenv("FLASK_SECRET_KEY") or secrets.token_hex(32)
 app.config["UPLOAD_FOLDER"] = str(Path("static") / "uploads")
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = os.getenv("COOKIE_SECURE", "").lower() in {"1", "true", "yes"}
+
+if os.getenv("TRUST_PROXY", "1").lower() not in {"0", "false", "no"}:
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 UPLOAD_FOLDER = Path(app.config["UPLOAD_FOLDER"])
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+
+SOCIAL_DEFAULTS_SYNCED = False
 
 ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
 ALLOWED_VIDEO_EXTENSIONS = {"mp4", "mov", "webm", "mkv"}
@@ -43,9 +57,11 @@ def get_db():
 
 
 def get_mongo_error():
+    global SOCIAL_DEFAULTS_SYNCED
     ready, error = ensure_mongo_ready()
-    if ready:
+    if ready and not SOCIAL_DEFAULTS_SYNCED:
         sync_social_defaults()
+        SOCIAL_DEFAULTS_SYNCED = True
     return None if ready else error
 
 
@@ -164,6 +180,14 @@ def allowed_media_file(filename):
     return None
 
 
+def build_media_url(file_id=None, filename=None):
+    if file_id:
+        return url_for("serve_media", file_id=file_id)
+    if filename:
+        return url_for("static", filename=f"uploads/{filename}")
+    return None
+
+
 def save_uploaded_media(file_storage):
     if not file_storage or not file_storage.filename:
         return None, None
@@ -174,8 +198,24 @@ def save_uploaded_media(file_storage):
         return None, "Only image and video files are allowed."
 
     unique_name = f"{uuid4().hex}_{safe_name}"
-    file_storage.save(UPLOAD_FOLDER / unique_name)
-    return {"media_filename": unique_name, "media_type": media_type}, None
+    if mongo_db.USING_LOCAL_STORE:
+        file_storage.save(UPLOAD_FOLDER / unique_name)
+        return {"media_filename": unique_name, "media_type": media_type}, None
+
+    file_content = file_storage.read()
+    if not file_content:
+        return None, "Uploaded file is empty."
+
+    file_id = gridfs.GridFS(get_db()).put(
+        file_content,
+        filename=unique_name,
+        content_type=file_storage.mimetype or "application/octet-stream",
+    )
+    return {
+        "media_filename": unique_name,
+        "media_file_id": str(file_id),
+        "media_type": media_type,
+    }, None
 
 
 def save_uploaded_avatar(file_storage):
@@ -186,17 +226,29 @@ def save_uploaded_avatar(file_storage):
         return None, "Profile photo must be an image file."
     if not payload:
         return None, None
-    return payload.get("media_filename"), None
+    return {
+        "avatar_filename": payload.get("media_filename"),
+        "avatar_file_id": payload.get("media_file_id"),
+    }, None
 
 
 def save_uploaded_image(file_storage):
-    return save_uploaded_avatar(file_storage)
+    payload, error = save_uploaded_avatar(file_storage)
+    if error or not payload:
+        return payload, error
+    return {
+        "cover_filename": payload.get("avatar_filename"),
+        "cover_file_id": payload.get("avatar_file_id"),
+    }, None
 
 
-def sync_avatar_filename(username, avatar_filename):
+def sync_avatar_media(username, avatar_payload):
     db = get_db()
-    db.posts.update_many({"author_username": username}, {"$set": {"avatar_filename": avatar_filename}})
-    db.stories.update_many({"username": username}, {"$set": {"avatar_filename": avatar_filename}})
+    avatar_updates = {"avatar_filename": avatar_payload.get("avatar_filename")}
+    if "avatar_file_id" in avatar_payload:
+        avatar_updates["avatar_file_id"] = avatar_payload.get("avatar_file_id")
+    db.posts.update_many({"author_username": username}, {"$set": avatar_updates})
+    db.stories.update_many({"username": username}, {"$set": avatar_updates})
 
 
 def format_created_label(created_at):
@@ -208,13 +260,13 @@ def add_avatar_fields(record):
     if not record:
         return record
     normalized = dict(record)
-    avatar_filename = normalized.get("avatar_filename")
-    cover_filename = normalized.get("cover_filename")
-    normalized["avatar_url"] = (
-        url_for("static", filename=f"uploads/{avatar_filename}") if avatar_filename else None
+    normalized["avatar_url"] = build_media_url(
+        normalized.get("avatar_file_id"),
+        normalized.get("avatar_filename"),
     )
-    normalized["cover_url"] = (
-        url_for("static", filename=f"uploads/{cover_filename}") if cover_filename else None
+    normalized["cover_url"] = build_media_url(
+        normalized.get("cover_file_id"),
+        normalized.get("cover_filename"),
     )
     normalized["avatar_label"] = normalized.get("avatar") or get_avatar_for_username(
         normalized.get("username") or normalized.get("user")
@@ -249,9 +301,9 @@ def normalize_datetime(value):
 def normalize_post(post, current_username=None):
     normalized = add_avatar_fields(post)
     normalized["created_label"] = format_created_label(normalized.get("created_at"))
-    media_filename = normalized.get("media_filename")
-    normalized["media_url"] = (
-        url_for("static", filename=f"uploads/{media_filename}") if media_filename else None
+    normalized["media_url"] = build_media_url(
+        normalized.get("media_file_id"),
+        normalized.get("media_filename"),
     )
     normalized["is_video"] = normalized.get("media_type") == "video"
     normalized["profile_username"] = normalized.get("author_username")
@@ -279,9 +331,9 @@ def normalize_post(post, current_username=None):
 def normalize_story(story):
     normalized = add_avatar_fields(story)
     normalized["created_label"] = format_created_label(normalized.get("created_at"))
-    media_filename = normalized.get("media_filename")
-    normalized["media_url"] = (
-        url_for("static", filename=f"uploads/{media_filename}") if media_filename else None
+    normalized["media_url"] = build_media_url(
+        normalized.get("media_file_id"),
+        normalized.get("media_filename"),
     )
     normalized["is_video"] = normalized.get("media_type") == "video"
     return normalized
@@ -314,6 +366,8 @@ def get_suggested_users(current_username):
                 "username": 1,
                 "selected_mood": 1,
                 "avatar": 1,
+                "avatar_file_id": 1,
+                "avatar_filename": 1,
                 "bio": 1,
                 "interests": 1,
                 "followers": 1,
@@ -337,6 +391,7 @@ def search_users_by_username(query, current_username, limit=8):
         {
             "username": 1,
             "avatar": 1,
+            "avatar_file_id": 1,
             "avatar_filename": 1,
             "bio": 1,
             "followers": 1,
@@ -369,6 +424,7 @@ def get_incoming_friend_requests(current_username, limit=None):
             {
                 "username": 1,
                 "avatar": 1,
+                "avatar_file_id": 1,
                 "avatar_filename": 1,
                 "bio": 1,
                 "followers": 1,
@@ -440,6 +496,34 @@ def home():
     return redirect(url_for("dashboard" if "user" in session else "login"))
 
 
+@app.route("/healthz")
+def healthcheck():
+    ready, mongo_error = ensure_mongo_ready()
+    return {
+        "status": "ok" if ready else "error",
+        "database": MONGO_DB_NAME,
+        "storage_mode": "local-demo" if mongo_db.USING_LOCAL_STORE else "mongo",
+        "mongo_error": mongo_error,
+    }, 200 if ready else 503
+
+
+@app.route("/media/<file_id>")
+def serve_media(file_id):
+    if mongo_db.USING_LOCAL_STORE:
+        abort(404)
+
+    try:
+        media_file = gridfs.GridFS(get_db()).get(ObjectId(file_id))
+    except (InvalidId, gridfs.errors.NoFile):
+        abort(404)
+
+    return Response(
+        media_file.read(),
+        mimetype=media_file.content_type or "application/octet-stream",
+        headers={"Cache-Control": "public, max-age=31536000"},
+    )
+
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
@@ -470,6 +554,9 @@ def register():
                     "friend_requests_received": [],
                     "saved_posts": [],
                     "blocked_users": [],
+                    "avatar_file_id": None,
+                    "avatar_filename": None,
+                    "cover_file_id": None,
                     "cover_filename": None,
                     "last_seen": datetime.now(timezone.utc),
                     "created_at": datetime.now(timezone.utc),
@@ -666,6 +753,7 @@ def create_story():
         "slug": f"story-{uuid4().hex}",
         "username": session["user"],
         "avatar": current_user.get("avatar", get_avatar_for_username(session["user"])),
+        "avatar_file_id": current_user.get("avatar_file_id"),
         "avatar_filename": current_user.get("avatar_filename"),
         "caption": caption,
         "created_at": datetime.now(timezone.utc),
@@ -682,15 +770,15 @@ def update_profile_photo():
     if "user" not in session:
         return redirect(url_for("login"))
 
-    avatar_filename, avatar_error = save_uploaded_avatar(request.files.get("profile_photo"))
+    avatar_payload, avatar_error = save_uploaded_avatar(request.files.get("profile_photo"))
     next_url = request.form.get("next_url") or url_for("my_profile")
 
-    if avatar_error or not avatar_filename:
+    if avatar_error or not avatar_payload:
         return redirect(next_url)
 
     username = session["user"]
-    get_db().users.update_one({"username": username}, {"$set": {"avatar_filename": avatar_filename}})
-    sync_avatar_filename(username, avatar_filename)
+    get_db().users.update_one({"username": username}, {"$set": avatar_payload})
+    sync_avatar_media(username, avatar_payload)
     return redirect(next_url)
 
 
@@ -699,15 +787,15 @@ def update_profile_cover():
     if "user" not in session:
         return redirect(url_for("login"))
 
-    cover_filename, cover_error = save_uploaded_image(request.files.get("cover_photo"))
+    cover_payload, cover_error = save_uploaded_image(request.files.get("cover_photo"))
     next_url = request.form.get("next_url") or url_for("my_profile")
 
-    if cover_error or not cover_filename:
+    if cover_error or not cover_payload:
         return redirect(next_url)
 
     get_db().users.update_one(
         {"username": session["user"]},
-        {"$set": {"cover_filename": cover_filename}},
+        {"$set": cover_payload},
     )
     return redirect(next_url)
 
@@ -896,6 +984,7 @@ def profile(username):
                 "user": username,
                 "author_username": username,
                 "avatar": viewed_user.get("avatar", get_avatar_for_username(username)),
+                "avatar_file_id": viewed_user.get("avatar_file_id"),
                 "avatar_filename": viewed_user.get("avatar_filename"),
                 "title": title,
                 "category": category,
@@ -923,7 +1012,7 @@ def profile(username):
         add_avatar_fields(
             db.users.find_one(
                 {"username": follower_username},
-                {"username": 1, "avatar": 1, "avatar_filename": 1, "bio": 1},
+                {"username": 1, "avatar": 1, "avatar_file_id": 1, "avatar_filename": 1, "bio": 1},
             )
         )
         for follower_username in viewed_user.get("followers", [])
@@ -967,8 +1056,8 @@ def settings():
         new_mood = request.form.get("selected_mood", "").strip()
         new_interests = request.form.getlist("interests")
         new_password = request.form.get("password", "").strip()
-        new_avatar_filename, avatar_error = save_uploaded_avatar(request.files.get("profile_photo"))
-        new_cover_filename, cover_error = save_uploaded_image(request.files.get("cover_photo"))
+        new_avatar_payload, avatar_error = save_uploaded_avatar(request.files.get("profile_photo"))
+        new_cover_payload, cover_error = save_uploaded_image(request.files.get("cover_photo"))
 
         if not new_email or not new_username:
             error = "Email and username are required."
@@ -985,10 +1074,10 @@ def settings():
                 "selected_mood": new_mood or None,
                 "interests": new_interests,
             }
-            if new_avatar_filename:
-                updates["avatar_filename"] = new_avatar_filename
-            if new_cover_filename:
-                updates["cover_filename"] = new_cover_filename
+            if new_avatar_payload:
+                updates.update(new_avatar_payload)
+            if new_cover_payload:
+                updates.update(new_cover_payload)
             if new_password:
                 updates["password"] = generate_password_hash(new_password)
 
@@ -996,9 +1085,9 @@ def settings():
                 db.users.update_one({"username": session["user"]}, {"$set": updates})
                 post_updates = {"author_username": new_username, "user": new_username, "avatar": get_avatar_for_username(new_username)}
                 story_updates = {"username": new_username, "avatar": get_avatar_for_username(new_username)}
-                if new_avatar_filename:
-                    post_updates["avatar_filename"] = new_avatar_filename
-                    story_updates["avatar_filename"] = new_avatar_filename
+                if new_avatar_payload:
+                    post_updates.update(new_avatar_payload)
+                    story_updates.update(new_avatar_payload)
                 if new_username != session["user"]:
                     old_username = session["user"]
                     session["user"] = new_username
@@ -1032,8 +1121,8 @@ def settings():
                     db.messages.update_many({"sender": old_username}, {"$set": {"sender": new_username}})
                     db.messages.update_many({"receiver": old_username}, {"$set": {"receiver": new_username}})
                     rename_username_references(old_username, new_username)
-                elif new_avatar_filename:
-                    sync_avatar_filename(session["user"], new_avatar_filename)
+                elif new_avatar_payload:
+                    sync_avatar_media(session["user"], new_avatar_payload)
 
                 success = "Profile updated successfully."
                 user = add_avatar_fields(with_social_defaults(get_current_user() or {}))
@@ -1070,7 +1159,10 @@ def messages_index():
             continue
         if other_user in current_user.get("blocked_users", []):
             continue
-        user_doc = db.users.find_one({"username": other_user}, {"username": 1, "avatar": 1, "avatar_filename": 1})
+        user_doc = db.users.find_one(
+            {"username": other_user},
+            {"username": 1, "avatar": 1, "avatar_file_id": 1, "avatar_filename": 1},
+        )
         user_doc = add_avatar_fields(user_doc)
         conversations.append(
             {
@@ -1144,7 +1236,10 @@ def messages_chat(username):
             continue
         if other_user in current_user.get("blocked_users", []):
             continue
-        user_doc = db.users.find_one({"username": other_user}, {"username": 1, "avatar": 1, "avatar_filename": 1})
+        user_doc = db.users.find_one(
+            {"username": other_user},
+            {"username": 1, "avatar": 1, "avatar_file_id": 1, "avatar_filename": 1},
+        )
         user_doc = add_avatar_fields(user_doc)
         conversations.append(
             {

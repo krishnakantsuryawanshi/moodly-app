@@ -23,7 +23,10 @@ def load_local_env():
             continue
 
         key, value = line.split("=", 1)
-        os.environ[key.strip()] = value.strip().strip('"').strip("'")
+        normalized_key = key.strip()
+        if normalized_key in os.environ:
+            continue
+        os.environ[normalized_key] = value.strip().strip('"').strip("'")
 
 
 load_local_env()
@@ -36,6 +39,7 @@ LOCAL_STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
 USING_LOCAL_STORE = False
 MONGO_ERROR_MESSAGE = None
 _db_instance = None
+_mongo_ready_result = None
 
 
 def get_client():
@@ -280,6 +284,7 @@ class LocalDatabase:
         self.posts = LocalCollection(self, "posts")
         self.stories = LocalCollection(self, "stories")
         self.messages = LocalCollection(self, "messages")
+        self.reports = LocalCollection(self, "reports")
 
     def __getitem__(self, item):
         if not hasattr(self, item):
@@ -288,18 +293,24 @@ class LocalDatabase:
 
     def _load(self):
         if not self.path.exists():
-            return {"users": [], "posts": [], "stories": [], "messages": []}
+            return {"users": [], "posts": [], "stories": [], "messages": [], "reports": []}
         raw = json.loads(self.path.read_text(encoding="utf-8"))
         data = _deserialize_value(raw)
         data.setdefault("users", [])
         data.setdefault("posts", [])
         data.setdefault("stories", [])
         data.setdefault("messages", [])
+        data.setdefault("reports", [])
         return data
 
     def save(self):
         payload = _serialize_value(self.data)
         self.path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    def command(self, name):
+        if name == "ping":
+            return {"ok": 1}
+        raise NotImplementedError(f"LocalDatabase command '{name}' is not implemented")
 
 
 def get_database():
@@ -1100,6 +1111,11 @@ def enable_local_store(message):
 
 
 def ensure_mongo_ready():
+    global _mongo_ready_result
+
+    if _mongo_ready_result is not None:
+        return _mongo_ready_result
+
     try:
         if "<db_password>" in MONGO_URI or "YOUR_ATLAS_LINK" in MONGO_URI:
             raise PyMongoError("MongoDB URI still contains a placeholder value.")
@@ -1110,7 +1126,8 @@ def ensure_mongo_ready():
         seed_posts()
         seed_stories()
         seed_messages()
-        return True, None
+        _mongo_ready_result = (True, None)
+        return _mongo_ready_result
     except PyMongoError as exc:
         enable_local_store(
             f"MongoDB connection failed ({get_safe_mongo_uri()}). Moodly is running on local demo data instead."
@@ -1120,4 +1137,5 @@ def ensure_mongo_ready():
         seed_posts()
         seed_stories()
         seed_messages()
-        return True, MONGO_ERROR_MESSAGE
+        _mongo_ready_result = (True, MONGO_ERROR_MESSAGE)
+        return _mongo_ready_result
