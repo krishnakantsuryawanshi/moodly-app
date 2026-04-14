@@ -34,6 +34,7 @@ UPLOAD_FOLDER = Path(app.config["UPLOAD_FOLDER"])
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 
 SOCIAL_DEFAULTS_SYNCED = False
+ASSET_VERSION = os.getenv("ASSET_VERSION", "2026-04-14-2")
 
 ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
 ALLOWED_VIDEO_EXTENSIONS = {"mp4", "mov", "webm", "mkv"}
@@ -68,6 +69,20 @@ def get_mongo_error():
 
 def get_option_map(options):
     return {option["value"]: option for option in options}
+
+
+@app.context_processor
+def inject_asset_version():
+    return {"ASSET_VERSION": ASSET_VERSION}
+
+
+@app.after_request
+def disable_html_caching(response):
+    if response.mimetype == "text/html":
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 
 def get_current_user():

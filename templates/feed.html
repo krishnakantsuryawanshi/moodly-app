@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Moodly Feed</title>
     <meta name="theme-color" content="#ea7a4c">
-    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json', v=ASSET_VERSION) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=ASSET_VERSION) }}">
 </head>
 <body>
 <div class="topbar">
@@ -401,6 +401,6 @@
         </section>
     </aside>
 </main>
-<script src="{{ url_for('static', filename='app.js') }}" defer></script>
+<script src="{{ url_for('static', filename='app.js', v=ASSET_VERSION) }}" defer></script>
 </body>
 </html>
