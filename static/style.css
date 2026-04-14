@@ -8,6 +8,10 @@ body {
     color: #1d2433;
 }
 
+html {
+    font-size: clamp(15px, 0.35vw + 14px, 18px);
+}
+
 a {
     color: #2363eb;
     text-decoration: none;
@@ -198,6 +202,42 @@ a {
     border-radius: 24px;
     padding: 36px 38px;
     text-align: center;
+}
+
+.auth-install-panel {
+    margin-top: 18px;
+    padding: 16px 18px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(255, 239, 214, 0.95), rgba(236, 241, 255, 0.98));
+    border: 1px solid #dde6f6;
+    display: grid;
+    gap: 12px;
+    text-align: left;
+}
+
+.auth-install-panel strong {
+    display: block;
+    font-size: 1rem;
+    color: #1d2433;
+}
+
+.auth-install-panel p {
+    margin: 6px 0 0;
+    color: #5d687d;
+    line-height: 1.55;
+    font-size: 0.92rem;
+}
+
+.install-app-btn {
+    border: 0;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #1d2d50 0%, #355c7d 50%, #ea7a4c 100%);
+    color: #fff;
+    font: inherit;
+    font-weight: 700;
+    padding: 13px 16px;
+    cursor: pointer;
+    width: 100%;
 }
 
 .auth-card-secondary {
@@ -1421,7 +1461,7 @@ a {
 
 .action-btn-label {
     display: block;
-    font-size: 16px;
+    font-size: 1rem;
     font-weight: 700;
     line-height: 1.2;
 }
@@ -1429,10 +1469,15 @@ a {
 .action-btn-meta {
     display: block;
     margin-top: 6px;
-    font-size: 12px;
+    font-size: 0.84rem;
     font-weight: 500;
     opacity: 0.88;
     line-height: 1.45;
+}
+
+.action-btn-compact {
+    min-height: 66px;
+    padding: 14px 16px !important;
 }
 
 .profile-action-pill {
@@ -1504,7 +1549,7 @@ a {
 
 .messages-title {
     margin: 0 0 18px;
-    font-size: 34px;
+    font-size: clamp(1.8rem, 2vw, 2.2rem);
 }
 
 .messages-subtitle {
@@ -1549,6 +1594,101 @@ a {
     line-height: 1.6;
 }
 
+.message-request-section {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.messages-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 6px 0 10px;
+}
+
+.messages-section-head h2 {
+    margin: 0;
+    font-size: 1rem;
+    color: #243044;
+}
+
+.messages-section-head span {
+    min-width: 34px;
+    text-align: center;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: #eef2ff;
+    color: #43537a;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.conversation-row-request {
+    background: linear-gradient(135deg, rgba(91, 140, 255, 0.12), rgba(123, 97, 255, 0.12));
+    border: 1px solid #dbe3ff;
+}
+
+.message-request-banner {
+    margin-bottom: 8px;
+    padding: 16px 18px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(91, 140, 255, 0.1), rgba(255, 123, 84, 0.12));
+    border: 1px solid #dbe3ff;
+}
+
+.message-request-banner strong {
+    display: block;
+    font-size: 0.98rem;
+    color: #21304b;
+}
+
+.message-request-banner p {
+    margin: 8px 0 0;
+    color: #566074;
+    line-height: 1.55;
+}
+
+.message-request-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+}
+
+.message-request-decline {
+    min-height: 66px;
+    padding: 0 18px !important;
+    border-radius: 18px;
+    font-weight: 700;
+}
+
+@media (min-width: 1200px) {
+    .auth-shell {
+        gap: 72px;
+        padding: 40px 32px;
+    }
+
+    .auth-preview {
+        width: 420px;
+        height: 580px;
+    }
+
+    .brand {
+        font-size: 72px;
+    }
+
+    .auth-column {
+        max-width: 430px;
+    }
+
+    .profile-copy h1,
+    .feed-hero h1 {
+        font-size: clamp(2.6rem, 3vw, 3.4rem);
+    }
+}
+
 @media (max-width: 900px) {
     .layout {
         grid-template-columns: 1fr;
@@ -1575,6 +1715,10 @@ a {
 }
 
 @media (max-width: 760px) {
+    html {
+        font-size: 15px;
+    }
+
     .auth-shell {
         display: block;
         padding: 24px 16px 32px;
@@ -1642,5 +1786,18 @@ a {
 
     .profile-avatar-stack {
         margin-bottom: 16px;
+    }
+
+    .auth-card {
+        padding: 28px 22px;
+    }
+
+    .brand {
+        font-size: 56px;
+    }
+
+    .profile-copy h1,
+    .feed-hero h1 {
+        font-size: 2rem;
     }
 }

@@ -1,2 +1,24 @@
-<h2>Welcome {{ user }} </h2>
-<a href="/logout">Logout</a>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard | Moodly</title>
+    <meta name="theme-color" content="#ea7a4c">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="layout">
+        <section class="main-column">
+            <article class="composer-card">
+                <p class="feed-kicker">Dashboard</p>
+                <h1>Welcome {{ user }}</h1>
+                <p class="feed-subtitle">Your account is active.</p>
+                <a href="{{ url_for('logout') }}" class="ghost-btn">Logout</a>
+            </article>
+        </section>
+    </main>
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</body>
+</html>

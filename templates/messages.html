@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Messages | Moodly</title>
+    <meta name="theme-color" content="#ea7a4c">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -26,7 +28,39 @@
         <section class="side-card">
             <p class="feed-kicker">Inbox</p>
             <h1 class="messages-title">Direct messages</h1>
-            <p class="messages-subtitle">Private chats with people you already follow, know, or want to keep close.</p>
+            <p class="messages-subtitle">Private chats open after the other user accepts your message request.</p>
+            {% if message_requests %}
+            <div class="message-request-section">
+                <div class="messages-section-head">
+                    <h2>Message Requests</h2>
+                    <span>{{ message_requests|length }}</span>
+                </div>
+                <div class="conversation-list">
+                    {% for conversation in message_requests %}
+                    <a href="{{ url_for('messages_chat', username=conversation.username) }}" class="conversation-row conversation-row-request {% if active_user and active_user.username == conversation.username %}conversation-row-active{% endif %}">
+                        <span class="user-row-avatar conversation-avatar {% if conversation.avatar_url %}avatar-photo{% endif %}">
+                            {% if conversation.avatar_url %}
+                            <img src="{{ conversation.avatar_url }}" alt="{{ conversation.username }}">
+                            {% else %}
+                            {{ conversation.avatar or conversation.username[0]|upper }}
+                            {% endif %}
+                        </span>
+                        <span class="conversation-copy">
+                            <strong>{{ conversation.username }}</strong>
+                            <small>{{ conversation.last_message }}</small>
+                        </span>
+                        <span class="conversation-meta">
+                            <small>{{ conversation.updated_label }}</small>
+                        </span>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            <div class="messages-section-head">
+                <h2>Chats</h2>
+                <span>{{ conversations|length }}</span>
+            </div>
             <div class="conversation-list">
                 {% for conversation in conversations %}
                 <a href="{{ url_for('messages_chat', username=conversation.username) }}" class="conversation-row {% if active_user and active_user.username == conversation.username %}conversation-row-active{% endif %}">
@@ -46,6 +80,9 @@
                     </span>
                 </a>
                 {% endfor %}
+                {% if not conversations %}
+                <p class="comment-empty">No active chats yet.</p>
+                {% endif %}
             </div>
         </section>
     </section>
@@ -71,6 +108,32 @@
             </div>
 
             <div class="chat-messages">
+                {% if active_thread and active_thread.is_request %}
+                <div class="message-request-banner">
+                    {% if active_thread.request_received_by_me %}
+                    <strong>{{ active_user.username }} sent you a message request.</strong>
+                    <p>Accept to unlock direct chat. Until then this stays in your message requests.</p>
+                    <div class="message-request-actions">
+                        <form method="POST" action="{{ url_for('respond_message_request', username=active_user.username) }}" class="inline-form">
+                            <input type="hidden" name="next_url" value="{{ request.path }}">
+                            <input type="hidden" name="action" value="accept">
+                            <button type="submit" class="action-btn action-btn-friend action-btn-compact">
+                                <span class="action-btn-label">Accept Request</span>
+                                <span class="action-btn-meta">Move this chat to inbox</span>
+                            </button>
+                        </form>
+                        <form method="POST" action="{{ url_for('respond_message_request', username=active_user.username) }}" class="inline-form">
+                            <input type="hidden" name="next_url" value="{{ url_for('messages_index') }}">
+                            <input type="hidden" name="action" value="decline">
+                            <button type="submit" class="secondary-btn message-request-decline">Decline</button>
+                        </form>
+                    </div>
+                    {% else %}
+                    <strong>Message request sent.</strong>
+                    <p>Your message will appear in {{ active_user.username }}'s message requests until they accept it.</p>
+                    {% endif %}
+                </div>
+                {% endif %}
                 {% for message in chat_messages %}
                 <div class="chat-bubble {% if message.sender == current_user.username %}chat-bubble-own{% endif %}">
                     <strong>{{ "You" if message.sender == current_user.username else message.sender }}</strong>
@@ -80,10 +143,17 @@
                 {% endfor %}
             </div>
 
+            {% if not active_thread or active_thread.can_compose %}
             <form method="POST" class="comment-form">
-                <input type="text" name="content" placeholder="Type a message..." required>
-                <button type="submit">Send</button>
+                <input
+                    type="text"
+                    name="content"
+                    placeholder="{{ 'Type a message...' if active_thread and active_thread.can_message_direct else 'Write your message request...' }}"
+                    required
+                >
+                <button type="submit">{{ 'Send' if active_thread and active_thread.can_message_direct else 'Send Request' }}</button>
             </form>
+            {% endif %}
             {% else %}
             <p class="feed-kicker">Open a chat</p>
             <h3>Select a conversation</h3>
@@ -92,5 +162,6 @@
         </section>
     </aside>
 </main>
+<script src="{{ url_for('static', filename='app.js') }}" defer></script>
 </body>
 </html>

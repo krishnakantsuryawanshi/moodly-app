@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Settings | Moodly</title>
+    <meta name="theme-color" content="#ea7a4c">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -113,5 +115,6 @@
         </section>
     </aside>
 </main>
+<script src="{{ url_for('static', filename='app.js') }}" defer></script>
 </body>
 </html>

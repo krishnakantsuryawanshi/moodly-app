@@ -90,6 +90,8 @@ def _matches_condition(value, condition):
             if isinstance(value, list):
                 return any(item in options for item in value)
             return value in options
+    if isinstance(value, list) and isinstance(condition, list):
+        return value == condition
     if isinstance(value, list):
         return condition in value
     return value == condition
@@ -220,6 +222,22 @@ class LocalCollection:
         if changed:
             self.database.save()
         return {"matched_count": matched}
+
+    def delete_one(self, query):
+        for index, document in enumerate(self.documents):
+            if _matches(document, query):
+                del self.documents[index]
+                self.database.save()
+                return {"deleted_count": 1}
+        return {"deleted_count": 0}
+
+    def delete_many(self, query):
+        remaining = [document for document in self.documents if not _matches(document, query)]
+        deleted_count = len(self.documents) - len(remaining)
+        if deleted_count:
+            self.database.data[self.name] = remaining
+            self.database.save()
+        return {"deleted_count": deleted_count}
 
     def bulk_write(self, operations):
         for operation in operations:

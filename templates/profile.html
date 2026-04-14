@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ profile_user.username }} | Moodly</title>
+    <meta name="theme-color" content="#ea7a4c">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -178,8 +180,8 @@
                     </span>
                     {% else %}
                     <a href="{{ url_for('messages_chat', username=profile_user.username) }}" class="ghost-btn action-btn-message">
-                        <span class="action-btn-label">Message</span>
-                        <span class="action-btn-meta">Start a private chat</span>
+                        <span class="action-btn-label">{{ "Message" if relationship.can_message_direct else "Send Request" }}</span>
+                        <span class="action-btn-meta">{{ "Open your private chat" if relationship.can_message_direct else "Send a message request first" }}</span>
                     </a>
                     {% endif %}
                 </div>
@@ -480,5 +482,6 @@
         </section>
     </aside>
 </main>
+<script src="{{ url_for('static', filename='app.js') }}" defer></script>
 </body>
 </html>

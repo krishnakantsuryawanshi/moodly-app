@@ -7,7 +7,7 @@ from uuid import uuid4
 import gridfs
 from bson import ObjectId
 from bson.errors import InvalidId
-from flask import Flask, Response, abort, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, redirect, render_template, request, send_from_directory, session, url_for
 from pymongo import UpdateOne
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -132,6 +132,7 @@ def build_relationship_state(current_user, viewed_user):
             "request_sent": False,
             "request_received": False,
             "has_blocked": False,
+            "can_message_direct": False,
         }
 
     current_user = with_social_defaults(current_user)
@@ -142,6 +143,7 @@ def build_relationship_state(current_user, viewed_user):
         "request_sent": viewed_username in current_user.get("friend_requests_sent", []),
         "request_received": viewed_username in current_user.get("friend_requests_received", []),
         "has_blocked": viewed_username in current_user.get("blocked_users", []),
+        "can_message_direct": viewed_username in current_user.get("friends", []),
     }
 
 
@@ -156,6 +158,49 @@ def enrich_user_card(user, current_user=None):
         "is_active": is_user_active(user),
         "last_seen_label": format_last_seen_label(user),
         **relationship,
+    }
+
+
+def get_message_thread(current_username, other_username):
+    participants = sorted([current_username, other_username])
+    return get_db().messages.find_one({"participants": participants})
+
+
+def is_message_request_pending(thread):
+    return bool(thread and thread.get("request_status") == "pending")
+
+
+def is_message_request_sender(thread, current_username):
+    return bool(is_message_request_pending(thread) and thread.get("request_sender") == current_username)
+
+
+def can_direct_message(current_user, target_username):
+    current_user = with_social_defaults(current_user)
+    return bool(target_username and target_username in current_user.get("friends", []))
+
+
+def normalize_conversation_preview(thread, current_username, user_doc):
+    other_user = next((name for name in thread.get("participants", []) if name != current_username), None)
+    if not other_user:
+        return None
+
+    is_pending = is_message_request_pending(thread)
+    is_sender = is_message_request_sender(thread, current_username)
+    preview_text = thread.get("last_message", "")
+    if is_pending and not is_sender:
+        preview_text = f"Message request: {preview_text}" if preview_text else "New message request"
+    elif is_pending and is_sender:
+        preview_text = "Waiting for approval"
+
+    return {
+        "username": other_user,
+        "avatar": (user_doc or {}).get("avatar", get_avatar_for_username(other_user)),
+        "avatar_url": (user_doc or {}).get("avatar_url"),
+        "is_active": is_user_active(user_doc),
+        "last_message": preview_text,
+        "updated_label": format_created_label(thread.get("updated_at")),
+        "is_request": is_pending,
+        "request_direction": "sent" if is_sender else "received" if is_pending else None,
     }
 
 
@@ -469,7 +514,9 @@ def build_navigation_context():
     current_username = session.get("user")
     if not current_username:
         return {"nav_conversations_count": 0, "nav_friend_requests_count": 0}
-    conversations = list(get_db().messages.find({"participants": current_username}))
+    conversations = list(
+        get_db().messages.find({"participants": current_username, "request_status": {"$ne": "pending"}})
+    )
     current_user = with_social_defaults(get_current_user() or {})
     return {
         "nav_conversations_count": len(conversations),
@@ -522,6 +569,13 @@ def serve_media(file_id):
         mimetype=media_file.content_type or "application/octet-stream",
         headers={"Cache-Control": "public, max-age=31536000"},
     )
+
+
+@app.route("/sw.js")
+def service_worker():
+    response = send_from_directory(app.static_folder, "sw.js")
+    response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -1120,6 +1174,7 @@ def settings():
                         db.messages.bulk_write(bulk_ops)
                     db.messages.update_many({"sender": old_username}, {"$set": {"sender": new_username}})
                     db.messages.update_many({"receiver": old_username}, {"$set": {"receiver": new_username}})
+                    db.messages.update_many({"request_sender": old_username}, {"$set": {"request_sender": new_username}})
                     rename_username_references(old_username, new_username)
                 elif new_avatar_payload:
                     sync_avatar_media(session["user"], new_avatar_payload)
@@ -1153,6 +1208,7 @@ def messages_index():
     threads = list(db.messages.find({"participants": current_username}).sort("updated_at", -1))
 
     conversations = []
+    message_requests = []
     for thread in threads:
         other_user = next((name for name in thread.get("participants", []) if name != current_username), None)
         if not other_user:
@@ -1164,23 +1220,22 @@ def messages_index():
             {"username": 1, "avatar": 1, "avatar_file_id": 1, "avatar_filename": 1},
         )
         user_doc = add_avatar_fields(user_doc)
-        conversations.append(
-            {
-                "username": other_user,
-                "avatar": (user_doc or {}).get("avatar", get_avatar_for_username(other_user)),
-                "avatar_url": (user_doc or {}).get("avatar_url"),
-                "is_active": is_user_active(user_doc),
-                "last_message": thread.get("last_message", ""),
-                "updated_label": format_created_label(thread.get("updated_at")),
-            }
-        )
+        preview = normalize_conversation_preview(thread, current_username, user_doc)
+        if not preview:
+            continue
+        if preview["is_request"] and preview["request_direction"] == "received":
+            message_requests.append(preview)
+        elif not preview["is_request"]:
+            conversations.append(preview)
 
     return render_template(
         "messages.html",
         current_user=current_user,
         conversations=conversations,
+        message_requests=message_requests,
         active_user=None,
         chat_messages=[],
+        active_thread=None,
         **build_navigation_context(),
     )
 
@@ -1205,8 +1260,15 @@ def messages_chat(username):
     target_user["last_seen_label"] = format_last_seen_label(target_user)
 
     participants = sorted([current_username, username])
+    thread = get_message_thread(current_username, username)
+    direct_allowed = can_direct_message(current_user, username)
+    pending_request = is_message_request_pending(thread)
+    pending_sent_by_me = is_message_request_sender(thread, current_username)
+    request_received_by_me = pending_request and not pending_sent_by_me
 
     if request.method == "POST":
+        if request_received_by_me:
+            return redirect(url_for("messages_chat", username=username))
         content = request.form.get("content", "").strip()
         if content:
             message_doc = {
@@ -1216,19 +1278,21 @@ def messages_chat(username):
                 "content": content,
                 "created_at": datetime.now(timezone.utc),
             }
-            db.messages.update_one(
-                {"participants": participants},
-                {
-                    "$set": {"updated_at": message_doc["created_at"], "last_message": content},
-                    "$setOnInsert": {"participants": participants},
-                    "$push": {"messages": message_doc},
-                },
-                upsert=True,
-            )
+            update_payload = {
+                "$set": {"updated_at": message_doc["created_at"], "last_message": content},
+                "$setOnInsert": {"participants": participants},
+                "$push": {"messages": message_doc},
+            }
+            if not direct_allowed:
+                update_payload["$set"].update(
+                    {"request_status": "pending", "request_sender": current_username}
+                )
+            db.messages.update_one({"participants": participants}, update_payload, upsert=True)
         return redirect(url_for("messages_chat", username=username))
 
     threads = list(db.messages.find({"participants": current_username}).sort("updated_at", -1))
     conversations = []
+    message_requests = []
     active_messages = []
     for thread in threads:
         other_user = next((name for name in thread.get("participants", []) if name != current_username), None)
@@ -1241,30 +1305,61 @@ def messages_chat(username):
             {"username": 1, "avatar": 1, "avatar_file_id": 1, "avatar_filename": 1},
         )
         user_doc = add_avatar_fields(user_doc)
-        conversations.append(
-            {
-                "username": other_user,
-                "avatar": (user_doc or {}).get("avatar", get_avatar_for_username(other_user)),
-                "avatar_url": (user_doc or {}).get("avatar_url"),
-                "is_active": is_user_active(user_doc),
-                "last_message": thread.get("last_message", ""),
-                "updated_label": format_created_label(thread.get("updated_at")),
-            }
-        )
+        preview = normalize_conversation_preview(thread, current_username, user_doc)
+        if not preview:
+            continue
+        if preview["is_request"] and preview["request_direction"] == "received":
+            message_requests.append(preview)
+        elif not preview["is_request"]:
+            conversations.append(preview)
         if other_user == username:
             active_messages = [
                 {**message, "created_label": format_created_label(message.get("created_at"))}
                 for message in thread.get("messages", [])
             ]
 
+    active_thread = get_message_thread(current_username, username)
+    active_request_pending = is_message_request_pending(active_thread)
+    active_request_sent = is_message_request_sender(active_thread, current_username)
+
     return render_template(
         "messages.html",
         current_user=current_user,
         conversations=conversations,
+        message_requests=message_requests,
         active_user=target_user,
         chat_messages=active_messages,
+        active_thread={
+            "is_request": active_request_pending,
+            "request_sent_by_me": active_request_sent,
+            "request_received_by_me": active_request_pending and not active_request_sent,
+            "can_message_direct": direct_allowed,
+            "can_compose": direct_allowed or not (active_request_pending and not active_request_sent),
+        },
         **build_navigation_context(),
     )
+
+
+@app.route("/messages/<username>/request/respond", methods=["POST"])
+def respond_message_request(username):
+    if "user" not in session:
+        return redirect(url_for("login"))
+
+    current_username = session["user"]
+    action = request.form.get("action", "").strip().lower()
+    thread = get_message_thread(current_username, username)
+    if not thread or thread.get("request_status") != "pending" or thread.get("request_sender") != username:
+        return redirect(url_for("messages_index"))
+
+    if action == "accept":
+        get_db().messages.update_one(
+            {"participants": sorted([current_username, username])},
+            {"$set": {"request_status": "accepted", "request_sender": None}},
+        )
+    elif action == "decline":
+        get_db().messages.delete_one({"participants": sorted([current_username, username])})
+
+    return redirect(request.form.get("next_url") or url_for("messages_index"))
 
 
 @app.route("/profile/<username>/report", methods=["POST"])
