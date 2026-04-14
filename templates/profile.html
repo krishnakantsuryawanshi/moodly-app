@@ -13,6 +13,7 @@
         <div class="topbar-links">
             <a href="{{ url_for('feed') }}">Feed</a>
             <a href="{{ url_for('my_profile') }}">My Profile</a>
+            <a href="{{ url_for('my_profile') }}#friend-requests">Requests{% if nav_friend_requests_count %} ({{ nav_friend_requests_count }}){% endif %}</a>
             <a href="{{ url_for('messages_index') }}">Messages{% if nav_conversations_count %} ({{ nav_conversations_count }}){% endif %}</a>
             <a href="{{ url_for('settings') }}">Settings</a>
             <a href="{{ url_for('logout') }}">Logout</a>
@@ -22,56 +23,138 @@
 
 <main class="layout">
     <section class="main-column">
-        <div class="profile-hero">
-            <div class="profile-avatar-large {% if profile_user.avatar_url %}profile-avatar-photo{% endif %}">
-                {% if profile_user.avatar_url %}
-                <img src="{{ profile_user.avatar_url }}" alt="{{ profile_user.username }}">
+        <div class="profile-cover-card">
+            <div class="profile-cover-media">
+                {% if profile_user.cover_url %}
+                <img src="{{ profile_user.cover_url }}" alt="{{ profile_user.username }} cover photo">
                 {% else %}
-                {{ profile_user.avatar_label or profile_user.username[0]|upper }}
+                <div class="profile-cover-fallback"></div>
+                {% endif %}
+                {% if is_own_profile %}
+                <form method="POST" action="{{ url_for('update_profile_cover') }}" enctype="multipart/form-data" class="cover-photo-form">
+                    <input type="hidden" name="next_url" value="{{ request.path }}">
+                    <label class="profile-photo-trigger profile-cover-trigger">
+                        <span>Edit cover</span>
+                        <input type="file" name="cover_photo" accept="image/*" onchange="this.form.submit()">
+                    </label>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="profile-hero profile-hero-overlap">
+            {% if not is_own_profile %}
+            <details class="profile-menu">
+                <summary class="profile-menu-trigger" aria-label="More options">...</summary>
+                <div class="profile-menu-sheet">
+                    <form method="POST" action="{{ url_for('report_user', username=profile_user.username) }}" class="profile-menu-form">
+                        <input type="hidden" name="next_url" value="{{ request.path }}">
+                        <button type="submit" class="menu-action-btn">Report user</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('block_user', username=profile_user.username) }}" class="profile-menu-form">
+                        <input type="hidden" name="next_url" value="{{ request.path }}">
+                        <button type="submit" class="menu-action-btn menu-action-btn-danger">{{ "Unblock user" if relationship.has_blocked else "Block user" }}</button>
+                    </form>
+                </div>
+            </details>
+            {% endif %}
+            <div class="profile-avatar-stack">
+                <div class="profile-avatar-large story-ring story-ring-profile">
+                    <span class="story-ring-core profile-ring-core {% if profile_user.avatar_url %}profile-avatar-photo{% endif %}">
+                        {% if profile_user.avatar_url %}
+                        <img src="{{ profile_user.avatar_url }}" alt="{{ profile_user.username }}">
+                        {% else %}
+                        {{ profile_user.avatar_label or profile_user.username[0]|upper }}
+                        {% endif %}
+                    </span>
+                </div>
+                {% if is_own_profile %}
+                <form method="POST" action="{{ url_for('update_profile_photo') }}" enctype="multipart/form-data" class="profile-photo-inline">
+                    <input type="hidden" name="next_url" value="{{ request.path }}">
+                    <label class="profile-photo-trigger">
+                        <span>Edit photo</span>
+                        <input type="file" name="profile_photo" accept="image/*" onchange="this.form.submit()">
+                    </label>
+                </form>
                 {% endif %}
             </div>
             <div class="profile-copy">
                 <p class="feed-kicker">Moodly Profile</p>
                 <h1>{{ profile_user.username }}</h1>
+                <p class="profile-handle">@{{ profile_user.username }}</p>
                 <p class="feed-subtitle">{{ profile_user.bio or "Moodly user" }}</p>
                 <div class="profile-stats">
-                    <span class="summary-pill">{{ profile_user.followers_count }} Followers</span>
-                    <span class="summary-pill">{{ profile_user.friends_count }} Friends</span>
+                    <details class="followers-dropdown profile-stat-card">
+                        <summary class="followers-trigger profile-stat-trigger">
+                            <strong>{{ profile_user.followers_count }}</strong>
+                            <span>Followers</span>
+                        </summary>
+                        <div class="followers-popover">
+                            <strong>Followers</strong>
+                            {% if follower_users %}
+                                {% for follower in follower_users %}
+                                <a href="{{ url_for('profile', username=follower.username) }}" class="followers-popover-item">
+                                    <span class="user-row-avatar conversation-avatar {% if follower.avatar_url %}avatar-photo{% endif %}">
+                                        {% if follower.avatar_url %}
+                                        <img src="{{ follower.avatar_url }}" alt="{{ follower.username }}">
+                                        {% else %}
+                                        {{ follower.avatar_label or follower.username[0]|upper }}
+                                        {% endif %}
+                                    </span>
+                                    <span>
+                                        <strong>{{ follower.username }}</strong>
+                                        <small>{{ follower.bio or "Moodly user" }}</small>
+                                    </span>
+                                </a>
+                                {% endfor %}
+                            {% else %}
+                            <p class="followers-empty">No followers yet</p>
+                            {% endif %}
+                        </div>
+                    </details>
+                    <div class="profile-stat-card">
+                        <strong>{{ profile_user.friends_count }}</strong>
+                        <span>Friends</span>
+                    </div>
                 </div>
                 <div class="summary-group">
-                    {% if selected_mood %}
-                    <span class="summary-pill">{{ selected_mood.emoji }} {{ selected_mood.label }}</span>
-                    {% endif %}
                     {% for interest in selected_interests %}
                     <span class="summary-pill">{{ interest.emoji }} {{ interest.label }}</span>
                     {% endfor %}
                 </div>
-
-                <div class="followers-preview">
-                    <strong>Followers:</strong>
-                    {% if follower_users %}
-                        {% for follower in follower_users[:6] %}
-                        <a href="{{ url_for('profile', username=follower.username) }}" class="summary-pill follower-pill">{{ follower.username }}</a>
-                        {% endfor %}
-                    {% else %}
-                    <span class="summary-pill">No followers yet</span>
-                    {% endif %}
+                <div class="profile-section-strip">
+                    <span>Profile</span>
+                    <span>Posts</span>
+                    <span>Connections</span>
                 </div>
+                {% if visible_follower_users %}
+                <div class="followers-preview">
+                    {% for follower in visible_follower_users %}
+                    <a href="{{ url_for('profile', username=follower.username) }}" class="summary-pill follower-pill">{{ follower.username }}</a>
+                    {% endfor %}
+                </div>
+                {% endif %}
 
                 {% if not is_own_profile %}
-                <div class="post-actions">
+                <div class="profile-actions">
                     <form method="POST" action="{{ url_for('follow_user', username=profile_user.username) }}" class="inline-form">
                         <input type="hidden" name="next_url" value="{{ request.path }}">
-                        <button type="submit">{{ "Unfollow" if relationship.is_following else "Follow" }}</button>
+                        <button type="submit" class="action-btn action-btn-follow" {% if relationship.has_blocked %}disabled{% endif %}>
+                            <span class="action-btn-label">{{ "Following" if relationship.is_following else "Follow" }}</span>
+                            <span class="action-btn-meta">{{ "Tap to unfollow" if relationship.is_following else "See updates first" }}</span>
+                        </button>
                     </form>
 
                     {% if relationship.is_friend %}
-                    <span class="ghost-btn">Friends</span>
+                    <span class="ghost-btn profile-action-pill">Friends</span>
                     {% elif relationship.request_received %}
                     <form method="POST" action="{{ url_for('respond_friend_request', username=profile_user.username) }}" class="inline-form">
                         <input type="hidden" name="next_url" value="{{ request.path }}">
                         <input type="hidden" name="action" value="accept">
-                        <button type="submit">Accept Friend</button>
+                        <button type="submit" class="action-btn action-btn-friend">
+                            <span class="action-btn-label">Accept Friend</span>
+                            <span class="action-btn-meta">Add to your circle</span>
+                        </button>
                     </form>
                     <form method="POST" action="{{ url_for('respond_friend_request', username=profile_user.username) }}" class="inline-form">
                         <input type="hidden" name="next_url" value="{{ request.path }}">
@@ -81,17 +164,99 @@
                     {% else %}
                     <form method="POST" action="{{ url_for('send_friend_request', username=profile_user.username) }}" class="inline-form">
                         <input type="hidden" name="next_url" value="{{ request.path }}">
-                        <button type="submit">{{ "Cancel Request" if relationship.request_sent else "Add Friend" }}</button>
+                        <button type="submit" class="action-btn action-btn-friend" {% if relationship.has_blocked %}disabled{% endif %}>
+                            <span class="action-btn-label">{{ "Request Sent" if relationship.request_sent else "Add Friend" }}</span>
+                            <span class="action-btn-meta">{{ "Tap to cancel request" if relationship.request_sent else "For direct connection" }}</span>
+                        </button>
                     </form>
                     {% endif %}
 
-                    <a href="{{ url_for('messages_chat', username=profile_user.username) }}" class="ghost-btn">Message</a>
+                    {% if relationship.has_blocked %}
+                    <span class="ghost-btn action-btn-message action-link-disabled">
+                        <span class="action-btn-label">Message</span>
+                        <span class="action-btn-meta">Unavailable while blocked</span>
+                    </span>
+                    {% else %}
+                    <a href="{{ url_for('messages_chat', username=profile_user.username) }}" class="ghost-btn action-btn-message">
+                        <span class="action-btn-label">Message</span>
+                        <span class="action-btn-meta">Start a private chat</span>
+                    </a>
+                    {% endif %}
                 </div>
+                {% if relationship.has_blocked %}
+                <p class="auth-error">You blocked this user. Unblock from the top-right menu to follow, friend, or message again.</p>
+                {% endif %}
                 {% endif %}
             </div>
         </div>
 
         {% if is_own_profile %}
+        <section class="composer-card">
+            <div class="profile-tools-grid">
+                <form method="POST" action="{{ url_for('update_profile_photo') }}" enctype="multipart/form-data" class="profile-panel-card">
+                    <input type="hidden" name="next_url" value="{{ request.path }}">
+                    <p class="feed-kicker">Profile Photo</p>
+                    <h2>Update your DP</h2>
+                    <p class="feed-subtitle">Pick a clean image and it updates across posts and stories.</p>
+                    <input type="file" name="profile_photo" accept="image/*" required>
+                    <button type="submit">Upload profile photo</button>
+                </form>
+
+                <form method="POST" action="{{ url_for('create_story') }}" enctype="multipart/form-data" class="profile-panel-card">
+                    <input type="hidden" name="next_url" value="{{ request.path }}">
+                    <p class="feed-kicker">Your Story</p>
+                    <h2>Share a quick update</h2>
+                    <p class="feed-subtitle">Add a story like Instagram with photo, video, or short caption.</p>
+                    <input type="text" name="caption" placeholder="Story caption">
+                    <input type="file" name="story_media" accept="image/*,video/*">
+                    <button type="submit">Add story</button>
+                </form>
+            </div>
+
+            <div class="story-reel">
+                {% for story in stories if story.username == current_user.username %}
+                <article class="story-reel-card">
+                    <div class="story-reel-head">
+                        <span class="story-ring">
+                            <span class="story-ring-core {% if story.avatar_url %}avatar-photo{% endif %}">
+                                {% if story.avatar_url %}
+                                <img src="{{ story.avatar_url }}" alt="{{ story.username }}">
+                                {% else %}
+                                {{ story.avatar_label or story.username[0]|upper }}
+                                {% endif %}
+                            </span>
+                        </span>
+                        <div class="story-reel-copy">
+                            <strong>{{ story.username }}</strong>
+                            <small>{{ story.created_label }}</small>
+                        </div>
+                    </div>
+                    {% if story.media_url %}
+                        {% if story.is_video %}
+                        <video class="story-media" controls>
+                            <source src="{{ story.media_url }}">
+                        </video>
+                        {% else %}
+                        <img class="story-media" src="{{ story.media_url }}" alt="{{ story.caption or story.username }}">
+                        {% endif %}
+                    {% else %}
+                    <div class="story-media story-media-empty">
+                        <span>{{ story.username[0]|upper }}</span>
+                    </div>
+                    {% endif %}
+                    {% if story.caption %}
+                    <p class="story-caption">{{ story.caption }}</p>
+                    {% endif %}
+                </article>
+                {% else %}
+                <article class="story-card story-card-empty">
+                    <h3>No live story</h3>
+                    <p>Post an image, video, or text update that disappears after 24 hours.</p>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+
         <section class="composer-card">
             <p class="feed-kicker">Create Post</p>
             <h2>Share a text, image, or video</h2>
@@ -175,6 +340,10 @@
                         <input type="hidden" name="next_url" value="{{ request.path }}">
                         <button type="submit">{{ "Unlike" if post.liked_by_me else "Like" }} &#10084; {{ post.likes_count }}</button>
                     </form>
+                    <form method="POST" action="{{ url_for('save_post', slug=post.slug) }}" class="inline-form">
+                        <input type="hidden" name="next_url" value="{{ request.path }}">
+                        <button type="submit" class="secondary-btn">{{ "Saved" if post.saved_by_me else "Save" }} {{ post.saves_count }}</button>
+                    </form>
                     <span class="ghost-btn">Comments {{ post.comments_count }}</span>
                 </div>
             </article>
@@ -187,6 +356,47 @@
             </article>
             {% endif %}
         </section>
+
+        {% if is_own_profile %}
+        <section class="composer-card">
+            <p class="feed-kicker">Saved Posts</p>
+            <h2>Bookmarks from your feed</h2>
+
+            {% for post in saved_posts %}
+            <article class="post-card post-card-compact">
+                <div class="post-head">
+                    <div class="post-avatar {% if post.avatar_url %}avatar-photo{% endif %}">
+                        {% if post.avatar_url %}
+                        <img src="{{ post.avatar_url }}" alt="{{ post.user }}">
+                        {% else %}
+                        {{ post.avatar_label or post.user[0]|upper }}
+                        {% endif %}
+                    </div>
+                    <div class="post-author">
+                        <span class="post-user-link">{{ post.user }}</span>
+                        <p class="post-meta">{{ post.created_label }}</p>
+                    </div>
+                </div>
+                {% if post.title %}
+                <h3 class="post-title">{{ post.title }}</h3>
+                {% endif %}
+                <p class="post-body">{{ post.content }}</p>
+                <div class="post-actions">
+                    <a href="{{ url_for('profile', username=post.profile_username) }}" class="ghost-btn">Open profile</a>
+                    <form method="POST" action="{{ url_for('save_post', slug=post.slug) }}" class="inline-form">
+                        <input type="hidden" name="next_url" value="{{ request.path }}">
+                        <button type="submit" class="secondary-btn">Remove save</button>
+                    </form>
+                </div>
+            </article>
+            {% else %}
+            <article class="post-card">
+                <h3>No saved posts yet</h3>
+                <p>Save interesting posts from the feed and they will appear here.</p>
+            </article>
+            {% endfor %}
+        </section>
+        {% endif %}
     </section>
 
     <aside class="side-column">
@@ -215,6 +425,48 @@
                 {% endif %}
             </div>
         </section>
+
+        {% if is_own_profile %}
+        <section class="side-card" id="friend-requests">
+            <p class="feed-kicker">Friend Requests</p>
+            <h3>Incoming requests for you</h3>
+            <div class="user-list">
+                {% for user in incoming_requests %}
+                <div class="user-card">
+                    <a href="{{ url_for('profile', username=user.username) }}" class="user-row">
+                        <span class="user-row-avatar {% if user.avatar_url %}avatar-photo{% endif %}">
+                            {% if user.avatar_url %}
+                            <img src="{{ user.avatar_url }}" alt="{{ user.username }}">
+                            {% else %}
+                            {{ user.avatar_label or user.username[0]|upper }}
+                            {% endif %}
+                        </span>
+                        <span class="user-row-copy">
+                            <strong>{{ user.username }}</strong>
+                            <small>{{ user.bio or "Moodly user" }}</small>
+                        </span>
+                    </a>
+                    <div class="user-card-actions">
+                        <form method="POST" action="{{ url_for('respond_friend_request', username=user.username) }}" class="inline-form">
+                            <input type="hidden" name="next_url" value="{{ request.path }}#friend-requests">
+                            <input type="hidden" name="action" value="accept">
+                            <button type="submit">Accept</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('respond_friend_request', username=user.username) }}" class="inline-form">
+                            <input type="hidden" name="next_url" value="{{ request.path }}#friend-requests">
+                            <input type="hidden" name="action" value="decline">
+                            <button type="submit" class="secondary-btn">Decline</button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+
+                {% if not incoming_requests %}
+                <p class="comment-empty">No incoming requests.</p>
+                {% endif %}
+            </div>
+        </section>
+        {% endif %}
 
         <section class="side-card">
             <p class="feed-kicker">Navigation</p>

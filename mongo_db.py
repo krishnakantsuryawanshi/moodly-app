@@ -151,6 +151,7 @@ class LocalCollection:
     UNIQUE_FIELDS = {
         "users": ("username", "email"),
         "posts": ("slug",),
+        "stories": ("slug",),
     }
 
     def __init__(self, database, name):
@@ -277,6 +278,7 @@ class LocalDatabase:
         self.data = self._load()
         self.users = LocalCollection(self, "users")
         self.posts = LocalCollection(self, "posts")
+        self.stories = LocalCollection(self, "stories")
         self.messages = LocalCollection(self, "messages")
 
     def __getitem__(self, item):
@@ -286,9 +288,14 @@ class LocalDatabase:
 
     def _load(self):
         if not self.path.exists():
-            return {"users": [], "posts": [], "messages": []}
+            return {"users": [], "posts": [], "stories": [], "messages": []}
         raw = json.loads(self.path.read_text(encoding="utf-8"))
-        return _deserialize_value(raw)
+        data = _deserialize_value(raw)
+        data.setdefault("users", [])
+        data.setdefault("posts", [])
+        data.setdefault("stories", [])
+        data.setdefault("messages", [])
+        return data
 
     def save(self):
         payload = _serialize_value(self.data)
@@ -319,14 +326,204 @@ def init_mongo():
     db.posts.create_index([("mood", ASCENDING)])
     db.posts.create_index([("author_username", ASCENDING)])
     db.posts.create_index([("created_at", DESCENDING)])
+    db.stories.create_index([("slug", ASCENDING)], unique=True)
+    db.stories.create_index([("username", ASCENDING)])
+    db.stories.create_index([("created_at", DESCENDING)])
     db.messages.create_index([("participants", ASCENDING)])
     db.messages.create_index([("updated_at", DESCENDING)])
+
+
+DEMO_FIRST_NAMES = [
+    "aashi",
+    "vivaan",
+    "kiara",
+    "reyansh",
+    "myra",
+    "aarav",
+    "suhani",
+    "laksh",
+    "ira",
+    "veer",
+]
+
+DEMO_LAST_NAMES = [
+    "gupta",
+    "sehgal",
+    "bansal",
+    "khurana",
+    "saxena",
+]
+
+DEMO_BIO_STARTERS = [
+    "late-night playlists",
+    "campus gossip",
+    "startup chaos",
+    "weekend coffee runs",
+    "relatable meme drops",
+    "quiet motivation",
+]
+
+DEMO_BIO_ENDINGS = [
+    "and low-key main character energy.",
+    "with zero chill and solid timing.",
+    "plus a dangerously active notes app.",
+    "and screenshots saved for later.",
+    "with stories that never stay boring.",
+]
+
+DEMO_POST_LINES = {
+    "memes": [
+        "Aaj productivity itni cinematic thi ki ek task karke bhi background score sunai de raha tha.",
+        "Group project mein mera role bas panic ka premium subscription lena tha.",
+        "Calendar full hai, but actual kaam dekh kar laptop bhi emotional ho gaya.",
+    ],
+    "jokes": [
+        "Maine bola bas ek reel dekhunga. Ab algorithm aur meri dosti official ho chuki hai.",
+        "Room clean karne gaya tha, nostalgia mil gaya. Kaam abhi bhi pending hai.",
+        "Mera self-control aur midnight snacks kabhi same room mein survive nahi karte.",
+    ],
+    "motivation": [
+        "Perfect plan se zyada important hai ki tum shuru karo aur momentum ko kaam karne do.",
+        "Slow progress bhi progress hai, especially jab tum quietly rebuild kar rahe ho.",
+        "Discipline boring lag sakta hai, but results ka aesthetic wahi banata hai.",
+    ],
+    "coding": [
+        "Issue fix karne gaya tha, pura architecture ka trust exercise ban gaya.",
+        "Jitna clean code likha tha, utna hi confidently bug ne production choose kiya.",
+        "Deployment ke baad jo silence hota hai wahi actual thriller soundtrack hai.",
+    ],
+}
+
+DEMO_POST_TITLES = {
+    "memes": ["Chaos check", "Scroll energy", "Daily meme report"],
+    "jokes": ["Tiny standup set", "Random thought", "Room temperature comedy"],
+    "motivation": ["Reset note", "Build mode", "Quiet comeback"],
+    "coding": ["Build log", "Debug diary", "Ship notes"],
+}
+
+DEMO_STORY_CAPTIONS = [
+    "Quick check-in before the next tab overload.",
+    "Moodboard open, responsibilities minimized.",
+    "Aaj ka vibe thoda extra curated hai.",
+    "Just passing through with one strong opinion and coffee.",
+]
+
+
+def generated_demo_users(now, default_password):
+    users = []
+    base_followers = [
+        "riyamehra",
+        "sanakhan",
+        "ishaanverma",
+        "mehuljoshi",
+        "anaykapoor",
+        "tanvichauhan",
+    ]
+    category_pairs = [
+        ["memes", "jokes"],
+        ["coding", "motivation"],
+        ["memes", "motivation"],
+        ["jokes", "coding"],
+    ]
+    moods = ["happy", "focused", "sad", "bored"]
+
+    index = 0
+    for first_name in DEMO_FIRST_NAMES:
+        for last_name in DEMO_LAST_NAMES:
+            username = f"{first_name}{last_name}"
+            bio = (
+                f"{DEMO_BIO_STARTERS[index % len(DEMO_BIO_STARTERS)].capitalize()}, "
+                f"{DEMO_BIO_ENDINGS[index % len(DEMO_BIO_ENDINGS)]}"
+            )
+            users.append(
+                {
+                    "email": f"{first_name}.{last_name}@moodly.app",
+                    "username": username,
+                    "password": default_password,
+                    "avatar": username[0].upper(),
+                    "bio": bio,
+                    "interests": category_pairs[index % len(category_pairs)],
+                    "selected_mood": moods[index % len(moods)],
+                    "followers": base_followers[: (index % 4) + 1],
+                    "friends": [base_followers[index % len(base_followers)]] if index % 9 == 0 else [],
+                    "friend_requests_sent": [],
+                    "friend_requests_received": ["riyamehra"] if index % 11 == 0 else [],
+                    "saved_posts": [],
+                    "blocked_users": [],
+                    "last_seen": now - timedelta(minutes=(index * 7) % 240),
+                    "created_at": now - timedelta(days=3 + index),
+                }
+            )
+            index += 1
+    return users
+
+
+def generated_demo_posts(now, users):
+    posts = []
+    base_likers = [
+        "riyamehra",
+        "sanakhan",
+        "anaykapoor",
+        "ishaanverma",
+        "mehuljoshi",
+        "tanvichauhan",
+    ]
+    languages = ["hinglish", "english", "hindi", "mixed"]
+
+    for index, user in enumerate(users):
+        interests = user.get("interests", ["memes"])
+        category = interests[index % len(interests)]
+        mood = user.get("selected_mood", "happy")
+        content_pool = DEMO_POST_LINES[category]
+        title_pool = DEMO_POST_TITLES[category]
+        author = user["username"]
+        post = {
+            "slug": f"user-{author}-demo-{index + 1}",
+            "user": author,
+            "author_username": author,
+            "avatar": user.get("avatar", author[0].upper()),
+            "title": title_pool[index % len(title_pool)],
+            "category": category,
+            "mood": mood,
+            "language": languages[index % len(languages)],
+            "content": content_pool[index % len(content_pool)],
+            "liked_by": base_likers[: ((index % 3) + 2)],
+            "comments": [],
+            "post_type": "user",
+            "created_at": now - timedelta(minutes=18 * (index + 1)),
+        }
+        if index % 4 == 0:
+            post["comments"] = [
+                {
+                    "id": f"comment-{author}-{index + 1}",
+                    "username": base_likers[index % len(base_likers)],
+                    "content": "This one is actually too real.",
+                    "created_at": now - timedelta(minutes=(18 * (index + 1)) - 6),
+                }
+            ]
+        posts.append(post)
+    return posts
+
+
+def generated_demo_stories(now, users):
+    stories = []
+    for index, user in enumerate(users[:12]):
+        stories.append(
+            {
+                "slug": f"story-{user['username']}-demo",
+                "username": user["username"],
+                "avatar": user.get("avatar", user["username"][0].upper()),
+                "caption": DEMO_STORY_CAPTIONS[index % len(DEMO_STORY_CAPTIONS)],
+                "created_at": now - timedelta(hours=index + 1),
+            }
+        )
+    return stories
 
 
 def fake_users_catalog():
     now = datetime.now(timezone.utc)
     default_password = generate_password_hash("moodly123")
-    return [
+    base_users = [
         {
             "email": "riya.mehra@moodly.app",
             "username": "riyamehra",
@@ -339,7 +536,7 @@ def fake_users_catalog():
             "followers": ["sanakhan", "ishaanverma", "mehuljoshi"],
             "friends": ["sanakhan"],
             "friend_requests_sent": [],
-            "friend_requests_received": [],
+            "friend_requests_received": ["tanvichauhan"],
             "created_at": now - timedelta(days=20),
         },
         {
@@ -354,7 +551,7 @@ def fake_users_catalog():
             "followers": ["kabirmalhotra", "priyanshisingh"],
             "friends": ["kabirmalhotra"],
             "friend_requests_sent": [],
-            "friend_requests_received": [],
+            "friend_requests_received": ["devanshpatel"],
             "created_at": now - timedelta(days=18),
         },
         {
@@ -369,7 +566,7 @@ def fake_users_catalog():
             "followers": ["riyamehra", "kavyanair"],
             "friends": ["riyamehra"],
             "friend_requests_sent": [],
-            "friend_requests_received": [],
+            "friend_requests_received": ["priyanshisingh"],
             "created_at": now - timedelta(days=16),
         },
         {
@@ -458,7 +655,7 @@ def fake_users_catalog():
             "selected_mood": "focused",
             "followers": ["mehuljoshi", "arpitmishra"],
             "friends": [],
-            "friend_requests_sent": [],
+            "friend_requests_sent": ["anaykapoor"],
             "friend_requests_received": [],
             "created_at": now - timedelta(days=7),
         },
@@ -473,7 +670,7 @@ def fake_users_catalog():
             "selected_mood": "bored",
             "followers": ["kavyanair", "mehuljoshi"],
             "friends": [],
-            "friend_requests_sent": [],
+            "friend_requests_sent": ["riyamehra"],
             "friend_requests_received": [],
             "created_at": now - timedelta(days=6),
         },
@@ -503,16 +700,17 @@ def fake_users_catalog():
             "selected_mood": "happy",
             "followers": ["tanvichauhan", "riyamehra"],
             "friends": [],
-            "friend_requests_sent": [],
+            "friend_requests_sent": ["sanakhan"],
             "friend_requests_received": [],
             "created_at": now - timedelta(days=4),
         },
     ]
+    return base_users + generated_demo_users(now, default_password)
 
 
 def fake_posts_catalog():
     now = datetime.now(timezone.utc)
-    return [
+    base_posts = [
         {
             "slug": "bot-meme-happy-1",
             "user": "LOL Sharma Bot",
@@ -769,6 +967,46 @@ def fake_posts_catalog():
             "created_at": now - timedelta(minutes=35),
         },
     ]
+    generated_users = generated_demo_users(now, generate_password_hash("moodly123"))
+    return base_posts + generated_demo_posts(now, generated_users)
+
+
+def fake_stories_catalog():
+    now = datetime.now(timezone.utc)
+    base_stories = [
+        {
+            "slug": "story-riya-evening",
+            "username": "riyamehra",
+            "avatar": "R",
+            "avatar_filename": "avatar-riya.svg",
+            "caption": "Evening chai and one reel break before I pretend to be productive.",
+            "media_filename": "post-tanvi-campus.svg",
+            "media_type": "image",
+            "created_at": now - timedelta(hours=3),
+        },
+        {
+            "slug": "story-anay-build",
+            "username": "anaykapoor",
+            "avatar": "A",
+            "avatar_filename": "avatar-anay.svg",
+            "caption": "Build fixed. Confidence restored for 11 minutes.",
+            "media_filename": "meme-deploy-fire.svg",
+            "media_type": "image",
+            "created_at": now - timedelta(hours=6),
+        },
+        {
+            "slug": "story-sana-soft",
+            "username": "sanakhan",
+            "avatar": "S",
+            "avatar_filename": "avatar-sana.svg",
+            "caption": "Rain playlist, low light, zero social battery.",
+            "media_filename": "post-arpit-wedding.svg",
+            "media_type": "image",
+            "created_at": now - timedelta(hours=10),
+        },
+    ]
+    generated_users = generated_demo_users(now, generate_password_hash("moodly123"))
+    return base_stories + generated_demo_stories(now, generated_users)
 
 
 def fake_messages_catalog():
@@ -821,6 +1059,12 @@ def seed_posts():
         db.posts.update_one({"slug": post["slug"]}, {"$set": post}, upsert=True)
 
 
+def seed_stories():
+    db = get_database()
+    for story in fake_stories_catalog():
+        db.stories.update_one({"slug": story["slug"]}, {"$set": story}, upsert=True)
+
+
 def seed_messages():
     db = get_database()
     for thread in fake_messages_catalog():
@@ -864,6 +1108,7 @@ def ensure_mongo_ready():
         init_mongo()
         seed_users()
         seed_posts()
+        seed_stories()
         seed_messages()
         return True, None
     except PyMongoError as exc:
@@ -873,5 +1118,6 @@ def ensure_mongo_ready():
         init_mongo()
         seed_users()
         seed_posts()
+        seed_stories()
         seed_messages()
         return True, MONGO_ERROR_MESSAGE

@@ -13,6 +13,7 @@
         <div class="topbar-links">
             <a href="{{ url_for('feed') }}">Feed</a>
             <a href="{{ url_for('my_profile') }}">My Profile</a>
+            <a href="{{ url_for('my_profile') }}#friend-requests">Requests{% if nav_friend_requests_count %} ({{ nav_friend_requests_count }}){% endif %}</a>
             <a href="{{ url_for('messages_index') }}">Messages{% if nav_conversations_count %} ({{ nav_conversations_count }}){% endif %}</a>
             <a href="{{ url_for('settings') }}">Settings</a>
             <a href="{{ url_for('logout') }}">Logout</a>
@@ -25,10 +26,11 @@
         <section class="side-card">
             <p class="feed-kicker">Inbox</p>
             <h1 class="messages-title">Direct messages</h1>
+            <p class="messages-subtitle">Private chats with people you already follow, know, or want to keep close.</p>
             <div class="conversation-list">
                 {% for conversation in conversations %}
                 <a href="{{ url_for('messages_chat', username=conversation.username) }}" class="conversation-row {% if active_user and active_user.username == conversation.username %}conversation-row-active{% endif %}">
-                    <span class="user-row-avatar {% if conversation.avatar_url %}avatar-photo{% endif %}">
+                    <span class="user-row-avatar conversation-avatar {% if conversation.avatar_url %}avatar-photo{% endif %}">
                         {% if conversation.avatar_url %}
                         <img src="{{ conversation.avatar_url }}" alt="{{ conversation.username }}">
                         {% else %}
@@ -39,7 +41,9 @@
                         <strong>{{ conversation.username }}</strong>
                         <small>{{ conversation.last_message }}</small>
                     </span>
-                    <small>{{ conversation.updated_label }}</small>
+                    <span class="conversation-meta">
+                        <small>{{ conversation.updated_label }}</small>
+                    </span>
                 </a>
                 {% endfor %}
             </div>
@@ -61,6 +65,7 @@
                     <div class="post-author">
                         <span class="post-user-link">{{ active_user.username }}</span>
                         <p class="post-meta">{{ active_user.bio or "Moodly chat" }}</p>
+                        <small class="chat-presence">{{ active_user.last_seen_label }}</small>
                     </div>
                 </div>
             </div>

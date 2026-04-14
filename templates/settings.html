@@ -13,6 +13,7 @@
         <div class="topbar-links">
             <a href="{{ url_for('feed') }}">Feed</a>
             <a href="{{ url_for('my_profile') }}">My Profile</a>
+            <a href="{{ url_for('my_profile') }}#friend-requests">Requests{% if nav_friend_requests_count %} ({{ nav_friend_requests_count }}){% endif %}</a>
             <a href="{{ url_for('messages_index') }}">Messages{% if nav_conversations_count %} ({{ nav_conversations_count }}){% endif %}</a>
             <a href="{{ url_for('settings') }}">Settings</a>
             <a href="{{ url_for('logout') }}">Logout</a>
@@ -23,11 +24,21 @@
 <main class="layout">
     <section class="main-column">
         <section class="profile-hero">
-            <div class="profile-avatar-large">{{ current_user.avatar or current_user.username[0]|upper }}</div>
+            <div class="profile-avatar-large {% if current_user.avatar_url %}profile-avatar-photo{% endif %}">
+                {% if current_user.avatar_url %}
+                <img src="{{ current_user.avatar_url }}" alt="{{ current_user.username }}">
+                {% else %}
+                {{ current_user.avatar or current_user.username[0]|upper }}
+                {% endif %}
+            </div>
             <div class="profile-copy">
                 <p class="feed-kicker">Profile Settings</p>
                 <h1>Update your account</h1>
-                <p class="feed-subtitle">Change your username, bio, mood, interests, and password from one place.</p>
+                <p class="feed-subtitle">Change your username, bio, mood, interests, password, and profile photo from one place.</p>
+                <div class="summary-group">
+                    <span class="summary-pill">Instagram-style DP upload</span>
+                    <span class="summary-pill">Story upload from profile</span>
+                </div>
             </div>
         </section>
 
@@ -39,7 +50,7 @@
             <p class="auth-success">{{ success }}</p>
             {% endif %}
 
-            <form method="POST" class="composer-form">
+            <form method="POST" enctype="multipart/form-data" class="composer-form">
                 <div class="composer-grid">
                     <input type="email" name="email" value="{{ current_user.email or '' }}" placeholder="Email" required>
                     <input type="text" name="username" value="{{ current_user.username or '' }}" placeholder="Username" required>
@@ -56,6 +67,21 @@
                     </select>
 
                     <input type="password" name="password" placeholder="New password (optional)">
+                </div>
+
+                <div class="profile-tools-grid">
+                    <div class="profile-panel-card">
+                        <p class="feed-kicker">Display Photo</p>
+                        <h2>Choose profile picture</h2>
+                        <p class="feed-subtitle">Use a square image for the cleanest circle crop.</p>
+                        <input type="file" name="profile_photo" accept="image/*">
+                    </div>
+                    <div class="profile-panel-card">
+                        <p class="feed-kicker">Cover Photo</p>
+                        <h2>Choose profile cover</h2>
+                        <p class="feed-subtitle">Add a wide banner like Facebook for a stronger profile look.</p>
+                        <input type="file" name="cover_photo" accept="image/*">
+                    </div>
                 </div>
 
                 <div class="choice-grid compact-grid">

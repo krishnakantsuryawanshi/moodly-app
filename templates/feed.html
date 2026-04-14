@@ -13,6 +13,7 @@
         <div class="topbar-links">
             <a href="{{ url_for('feed') }}">Feed</a>
             <a href="{{ url_for('my_profile') }}">My Profile</a>
+            <a href="{{ url_for('my_profile') }}#friend-requests">Requests{% if nav_friend_requests_count %} ({{ nav_friend_requests_count }}){% endif %}</a>
             <a href="{{ url_for('messages_index') }}">Messages{% if nav_conversations_count %} ({{ nav_conversations_count }}){% endif %}</a>
             <a href="{{ url_for('settings') }}">Settings</a>
             <a href="{{ url_for('logout') }}">Logout</a>
@@ -22,16 +23,54 @@
 
 <main class="layout">
     <section class="main-column">
-        <div class="feed-hero feed-hero-mood">
-            <div>
+        <div class="feed-hero feed-hero-mood feed-hero-grid">
+            <div class="feed-hero-copy">
                 <p class="feed-kicker">Mood Switch</p>
-                <h1>Switch your vibe from the top bar</h1>
-                <p class="feed-subtitle">Your feed updates to show memes, jokes, motivation, and posts that match your selected mood.</p>
+                <h1>Your mood, your people, your scroll.</h1>
+                <p class="feed-subtitle">Switch the vibe, discover new people, and keep the feed aligned with what you want right now.</p>
+                <div class="hero-metrics">
+                    <div class="hero-metric-card">
+                        <strong>{{ posts|length }}</strong>
+                        <span>Posts in this mix</span>
+                    </div>
+                    <div class="hero-metric-card">
+                        <strong>{{ suggested_users|length }}</strong>
+                        <span>People to explore</span>
+                    </div>
+                    <div class="hero-metric-card">
+                        <strong>{{ stories|length }}</strong>
+                        <span>Live stories</span>
+                    </div>
+                </div>
+
+                <form method="GET" action="{{ url_for('feed') }}" class="search-form search-form-top">
+                    {% if selected_mood %}
+                    <input type="hidden" name="mood" value="{{ selected_mood.value }}">
+                    {% endif %}
+                    <input type="text" name="username" value="{{ username_query or '' }}" placeholder="Search username here">
+                    <button type="submit">Search</button>
+                </form>
             </div>
-            <div class="summary-group">
-                {% for interest in selected_interests %}
-                <span class="summary-pill">{{ interest.emoji }} {{ interest.label }}</span>
-                {% endfor %}
+            <div class="feed-profile-card feed-profile-card-modern">
+                <a href="{{ url_for('my_profile') }}" class="story-ring story-ring-lg">
+                    <span class="story-ring-core {% if current_user.avatar_url %}avatar-photo{% endif %}">
+                        {% if current_user.avatar_url %}
+                        <img src="{{ current_user.avatar_url }}" alt="{{ current_user.username }}">
+                        {% else %}
+                        {{ current_user.avatar_label or current_user.username[0]|upper }}
+                        {% endif %}
+                    </span>
+                </a>
+                <div class="feed-profile-copy">
+                    <strong>@{{ current_user.username }}</strong>
+                    <span>{{ selected_mood.emoji if selected_mood else "Now" }} {{ selected_mood.label if selected_mood else "Choose your mood" }}</span>
+                    <div class="summary-group">
+                        {% for interest in selected_interests %}
+                        <span class="summary-pill">{{ interest.emoji }} {{ interest.label }}</span>
+                        {% endfor %}
+                    </div>
+                    <a href="{{ url_for('my_profile') }}" class="ghost-btn hero-profile-link">Open profile studio</a>
+                </div>
             </div>
         </div>
 
@@ -46,6 +85,121 @@
             </a>
             {% endfor %}
         </div>
+
+        <section class="composer-card">
+            <div class="stories-head">
+                <div>
+                    <p class="feed-kicker">Stories</p>
+                    <h2>Post a story for the next 24 hours</h2>
+                </div>
+                <form method="POST" action="{{ url_for('create_story') }}" enctype="multipart/form-data" class="story-form">
+                    <input type="hidden" name="next_url" value="{{ request.full_path if request.query_string else request.path }}">
+                    <input type="text" name="caption" placeholder="Story caption">
+                    <input type="file" name="story_media" accept="image/*,video/*">
+                    <button type="submit">Add story</button>
+                </form>
+            </div>
+
+            <div class="story-reel">
+                <article class="story-upload-card">
+                    <div class="story-upload-cover">
+                        <div class="story-ring story-ring-lg">
+                            <span class="story-ring-core {% if current_user.avatar_url %}avatar-photo{% endif %}">
+                                {% if current_user.avatar_url %}
+                                <img src="{{ current_user.avatar_url }}" alt="{{ current_user.username }}">
+                                {% else %}
+                                {{ current_user.avatar_label or current_user.username[0]|upper }}
+                                {% endif %}
+                            </span>
+                        </div>
+                        <span class="story-upload-plus">+</span>
+                    </div>
+                    <strong>Your story</strong>
+                    <p>Upload a photo, reel, or quick text.</p>
+                </article>
+
+                {% for story in stories %}
+                <article class="story-reel-card">
+                    <div class="story-reel-head">
+                        <span class="story-ring">
+                            <span class="story-ring-core {% if story.avatar_url %}avatar-photo{% endif %}">
+                                {% if story.avatar_url %}
+                                <img src="{{ story.avatar_url }}" alt="{{ story.username }}">
+                                {% else %}
+                                {{ story.avatar_label or story.username[0]|upper }}
+                                {% endif %}
+                            </span>
+                        </span>
+                        <div class="story-reel-copy">
+                            <strong>{{ story.username }}</strong>
+                            <small>{{ story.created_label }}</small>
+                        </div>
+                    </div>
+                    {% if story.media_url %}
+                        {% if story.is_video %}
+                        <video class="story-media" controls>
+                            <source src="{{ story.media_url }}">
+                        </video>
+                        {% else %}
+                        <img class="story-media" src="{{ story.media_url }}" alt="{{ story.caption or story.username }}">
+                        {% endif %}
+                    {% else %}
+                    <div class="story-media story-media-empty">
+                        <span>{{ story.username[0]|upper }}</span>
+                    </div>
+                    {% endif %}
+                    {% if story.caption %}
+                    <p class="story-caption">{{ story.caption }}</p>
+                    {% endif %}
+                </article>
+                {% endfor %}
+
+                {% if not stories %}
+                <article class="story-card story-card-empty">
+                    <h3>No stories yet</h3>
+                    <p>Upload the first image, video, or quick text story.</p>
+                </article>
+                {% endif %}
+            </div>
+        </section>
+
+        {% if username_query %}
+        <section class="composer-card search-panel">
+            <div>
+                <p class="feed-kicker">Search Results</p>
+                <h2>People matching "{{ username_query }}"</h2>
+            </div>
+            <div class="user-list">
+                {% for user in searched_users %}
+                <div class="user-card">
+                    <a href="{{ url_for('profile', username=user.username) }}" class="user-row">
+                        <span class="user-row-avatar {% if user.avatar_url %}avatar-photo{% endif %}">
+                            {% if user.avatar_url %}
+                            <img src="{{ user.avatar_url }}" alt="{{ user.username }}">
+                            {% else %}
+                            {{ user.avatar_label or user.username[0]|upper }}
+                            {% endif %}
+                        </span>
+                        <span class="user-row-copy">
+                            <strong>{{ user.username }}</strong>
+                            <small>{{ user.bio or "Moodly user" }}</small>
+                        </span>
+                    </a>
+                    <div class="user-card-actions user-card-actions-rich">
+                        <a href="{{ url_for('profile', username=user.username) }}" class="ghost-btn social-cta social-cta-neutral">
+                            <span class="social-cta-label">Open profile</span>
+                            <span class="social-cta-meta">{{ user.followers_count }} followers</span>
+                        </a>
+                    </div>
+                </div>
+                {% endfor %}
+
+                {% if not searched_users %}
+                <p class="comment-empty">No username matched "{{ username_query }}".</p>
+                {% endif %}
+            </div>
+        </section>
+        {% endif %}
 
         {% if feed_error %}
         <article class="post-card">
@@ -100,6 +254,10 @@
                     <input type="hidden" name="next_url" value="{{ request.full_path if request.query_string else request.path }}">
                     <button type="submit">{{ "Unlike" if post.liked_by_me else "Like" }} &#10084; {{ post.likes_count }}</button>
                 </form>
+                <form method="POST" action="{{ url_for('save_post', slug=post.slug) }}" class="inline-form">
+                    <input type="hidden" name="next_url" value="{{ request.full_path if request.query_string else request.path }}">
+                    <button type="submit" class="secondary-btn">{{ "Saved" if post.saved_by_me else "Save" }} {{ post.saves_count }}</button>
+                </form>
                 <a href="#comment-{{ post.slug }}" class="ghost-btn">Comments {{ post.comments_count }}</a>
                 <a href="{% if post.profile_username %}{{ url_for('profile', username=post.profile_username) }}{% else %}#{% endif %}" class="ghost-btn">View profile</a>
             </div>
@@ -135,17 +293,11 @@
     </section>
 
     <aside class="side-column">
-        <section class="side-card">
-            <p class="feed-kicker">Current Mood</p>
-            <h3>{{ selected_mood.emoji if selected_mood else "" }} {{ selected_mood.label if selected_mood else "Pick one" }}</h3>
-            <p>{{ selected_mood.description if selected_mood else "Choose a mood to personalize the feed." }}</p>
-        </section>
-
-        <section class="side-card">
-            <p class="feed-kicker">People</p>
-            <h3>Visit other profiles</h3>
+        <section class="side-card" id="friend-requests">
+            <p class="feed-kicker">Friend Requests</p>
+            <h3>People who sent you a request</h3>
             <div class="user-list">
-                {% for user in suggested_users %}
+                {% for user in incoming_requests %}
                 <div class="user-card">
                     <a href="{{ url_for('profile', username=user.username) }}" class="user-row">
                         <span class="user-row-avatar {% if user.avatar_url %}avatar-photo{% endif %}">
@@ -157,26 +309,87 @@
                         </span>
                         <span class="user-row-copy">
                             <strong>{{ user.username }}</strong>
-                            <small>{{ user.followers_count }} followers • {{ user.friends_count }} friends</small>
+                            <small>{{ user.bio or "Moodly user" }}</small>
                         </span>
                     </a>
-                    <div class="user-card-actions">
+                    <div class="user-card-actions user-card-actions-rich">
+                        <form method="POST" action="{{ url_for('respond_friend_request', username=user.username) }}" class="inline-form">
+                            <input type="hidden" name="next_url" value="{{ request.full_path if request.query_string else request.path }}">
+                            <input type="hidden" name="action" value="accept">
+                            <button type="submit" class="social-cta social-cta-friend">
+                                <span class="social-cta-label">Accept</span>
+                                <span class="social-cta-meta">Become friends</span>
+                            </button>
+                        </form>
+                        <form method="POST" action="{{ url_for('respond_friend_request', username=user.username) }}" class="inline-form">
+                            <input type="hidden" name="next_url" value="{{ request.full_path if request.query_string else request.path }}">
+                            <input type="hidden" name="action" value="decline">
+                            <button type="submit" class="secondary-btn">Decline</button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+
+                {% if not incoming_requests %}
+                <p class="comment-empty">No incoming requests right now.</p>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="side-card">
+            <p class="feed-kicker">Current Mood</p>
+            <h3>{{ selected_mood.emoji if selected_mood else "" }} {{ selected_mood.label if selected_mood else "Pick one" }}</h3>
+            <p>{{ selected_mood.description if selected_mood else "Choose a mood to personalize the feed." }}</p>
+        </section>
+
+        <section class="side-card">
+            <p class="feed-kicker">People</p>
+            <h3>Visit other profiles</h3>
+            <div class="user-list">
+                {% for user in suggested_users %}
+                <div class="user-card user-card-modern">
+                    <a href="{{ url_for('profile', username=user.username) }}" class="user-row">
+                        <span class="user-row-avatar {% if user.avatar_url %}avatar-photo{% endif %}">
+                            {% if user.avatar_url %}
+                            <img src="{{ user.avatar_url }}" alt="{{ user.username }}">
+                            {% else %}
+                            {{ user.avatar_label or user.username[0]|upper }}
+                            {% endif %}
+                        </span>
+                        <span class="user-row-copy">
+                            <strong>{{ user.username }}</strong>
+                            <small>{{ user.followers_count }} followers | {{ user.friends_count }} friends</small>
+                        </span>
+                    </a>
+                    <div class="user-card-actions user-card-actions-rich">
                         <form method="POST" action="{{ url_for('follow_user', username=user.username) }}" class="inline-form">
                             <input type="hidden" name="next_url" value="{{ request.full_path if request.query_string else request.path }}">
-                            <button type="submit">{{ "Unfollow" if user.is_following else "Follow" }}</button>
+                            <button type="submit" class="social-cta social-cta-follow">
+                                <span class="social-cta-label">{{ "Following" if user.is_following else "Follow" }}</span>
+                                <span class="social-cta-meta">{{ "Tap to unfollow" if user.is_following else "Keep up with posts" }}</span>
+                            </button>
                         </form>
                         {% if user.is_friend %}
-                        <span class="ghost-btn">Friends</span>
+                        <span class="ghost-btn social-cta social-cta-neutral">
+                            <span class="social-cta-label">Friends</span>
+                            <span class="social-cta-meta">Already connected</span>
+                        </span>
                         {% elif user.request_received %}
                         <form method="POST" action="{{ url_for('respond_friend_request', username=user.username) }}" class="inline-form">
                             <input type="hidden" name="next_url" value="{{ request.full_path if request.query_string else request.path }}">
                             <input type="hidden" name="action" value="accept">
-                            <button type="submit">Accept</button>
+                            <button type="submit" class="social-cta social-cta-friend">
+                                <span class="social-cta-label">Accept</span>
+                                <span class="social-cta-meta">Confirm request</span>
+                            </button>
                         </form>
                         {% else %}
                         <form method="POST" action="{{ url_for('send_friend_request', username=user.username) }}" class="inline-form">
                             <input type="hidden" name="next_url" value="{{ request.full_path if request.query_string else request.path }}">
-                            <button type="submit">{{ "Cancel Request" if user.request_sent else "Add Friend" }}</button>
+                            <button type="submit" class="social-cta social-cta-friend">
+                                <span class="social-cta-label">{{ "Request Sent" if user.request_sent else "Add Friend" }}</span>
+                                <span class="social-cta-meta">{{ "Tap to cancel" if user.request_sent else "Start a closer connection" }}</span>
+                            </button>
                         </form>
                         {% endif %}
                     </div>
