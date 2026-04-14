@@ -2,5 +2,6 @@ venv/
 __pycache__/
 *.pyc
 .env
+data/
 .pytest_cache/
 .mypy_cache/

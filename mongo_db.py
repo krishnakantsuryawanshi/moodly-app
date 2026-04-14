@@ -3,7 +3,7 @@ import os
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import quote, urlsplit, urlunsplit
 
 from pymongo import ASCENDING, DESCENDING, MongoClient, UpdateOne
 from pymongo.errors import DuplicateKeyError, PyMongoError
@@ -31,7 +31,35 @@ def load_local_env():
 
 load_local_env()
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
+def _normalize_mongo_uri(raw_uri):
+    if not raw_uri or "://" not in raw_uri:
+        return raw_uri
+
+    scheme, remainder = raw_uri.split("://", 1)
+    suffix_index = len(remainder)
+    for separator in ("/", "?", "#"):
+        candidate = remainder.find(separator)
+        if candidate != -1:
+            suffix_index = min(suffix_index, candidate)
+
+    netloc = remainder[:suffix_index]
+    suffix = remainder[suffix_index:]
+
+    if "@" not in netloc or ":" not in netloc.split("@", 1)[0]:
+        return raw_uri
+
+    credentials, host = netloc.rsplit("@", 1)
+    username, password = credentials.split(":", 1)
+
+    if "<db_password>" in password:
+        password = os.getenv("MONGO_PASSWORD", password)
+
+    safe_username = quote(username, safe="")
+    safe_password = quote(password, safe="")
+    return f"{scheme}://{safe_username}:{safe_password}@{host}{suffix}"
+
+
+MONGO_URI = _normalize_mongo_uri(os.getenv("MONGO_URI", "mongodb://localhost:27017/"))
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "moodly_db")
 LOCAL_STORE_PATH = Path("data") / "moodly_local.json"
 LOCAL_STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -322,7 +350,10 @@ class LocalDatabase:
     def _load(self):
         if not self.path.exists():
             return {"users": [], "posts": [], "stories": [], "messages": [], "reports": []}
-        raw = json.loads(self.path.read_text(encoding="utf-8"))
+        try:
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return {"users": [], "posts": [], "stories": [], "messages": [], "reports": []}
         data = _deserialize_value(raw)
         data.setdefault("users", [])
         data.setdefault("posts", [])
@@ -333,7 +364,9 @@ class LocalDatabase:
 
     def save(self):
         payload = _serialize_value(self.data)
-        self.path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        temp_path = self.path.with_suffix(f"{self.path.suffix}.tmp")
+        temp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        temp_path.replace(self.path)
 
     def command(self, name):
         if name == "ping":
