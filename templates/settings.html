@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings | Moodly</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="topbar">
+    <div class="topbar-inner">
+        <a href="{{ url_for('feed') }}" class="brand-inline">Moodly</a>
+        <div class="topbar-links">
+            <a href="{{ url_for('feed') }}">Feed</a>
+            <a href="{{ url_for('my_profile') }}">My Profile</a>
+            <a href="{{ url_for('messages_index') }}">Messages{% if nav_conversations_count %} ({{ nav_conversations_count }}){% endif %}</a>
+            <a href="{{ url_for('settings') }}">Settings</a>
+            <a href="{{ url_for('logout') }}">Logout</a>
+        </div>
+    </div>
+</div>
+
+<main class="layout">
+    <section class="main-column">
+        <section class="profile-hero">
+            <div class="profile-avatar-large">{{ current_user.avatar or current_user.username[0]|upper }}</div>
+            <div class="profile-copy">
+                <p class="feed-kicker">Profile Settings</p>
+                <h1>Update your account</h1>
+                <p class="feed-subtitle">Change your username, bio, mood, interests, and password from one place.</p>
+            </div>
+        </section>
+
+        <section class="composer-card">
+            {% if error %}
+            <p class="auth-error">{{ error }}</p>
+            {% endif %}
+            {% if success %}
+            <p class="auth-success">{{ success }}</p>
+            {% endif %}
+
+            <form method="POST" class="composer-form">
+                <div class="composer-grid">
+                    <input type="email" name="email" value="{{ current_user.email or '' }}" placeholder="Email" required>
+                    <input type="text" name="username" value="{{ current_user.username or '' }}" placeholder="Username" required>
+                </div>
+
+                <textarea name="bio" rows="4" placeholder="Bio">{{ current_user.bio or '' }}</textarea>
+
+                <div class="composer-grid">
+                    <select name="selected_mood">
+                        <option value="">Choose mood</option>
+                        {% for option in mood_options %}
+                        <option value="{{ option.value }}" {% if current_user.selected_mood == option.value %}selected{% endif %}>{{ option.emoji }} {{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+
+                    <input type="password" name="password" placeholder="New password (optional)">
+                </div>
+
+                <div class="choice-grid compact-grid">
+                    {% for option in category_options %}
+                    <label class="choice-card compact-card">
+                        <input
+                            type="checkbox"
+                            name="interests"
+                            value="{{ option.value }}"
+                            {% if option.value in (current_user.interests or []) %}checked{% endif %}
+                        >
+                        <span class="choice-emoji">{{ option.emoji }}</span>
+                        <span class="choice-title">{{ option.label }}</span>
+                        <span class="choice-text">{{ option.description }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+
+                <button type="submit" class="primary-btn">Save changes</button>
+            </form>
+        </section>
+    </section>
+
+    <aside class="side-column">
+        <section class="side-card">
+            <p class="feed-kicker">Demo Accounts</p>
+            <h3>Quick login</h3>
+            <p>Fake seeded users use password <strong>moodly123</strong>.</p>
+        </section>
+    </aside>
+</main>
+</body>
+</html>

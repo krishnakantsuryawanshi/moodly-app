@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Select Categories</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="setup-page">
+  <div class="setup-card setup-card-wide">
+    <div class="setup-hero">
+      <span class="setup-chip">Step 1</span>
+      <h2>What should your feed feel like?</h2>
+      <p>Choose categories and Moodly will fill your timeline with bot posts, memes, jokes, and vibe-matched content.</p>
+    </div>
+
+    {% if error %}
+    <p class="auth-error">{{ error }}</p>
+    {% endif %}
+
+    <form method="POST" class="setup-form">
+      <div class="choice-grid">
+        {% for option in category_options %}
+        <label class="choice-card">
+          <input
+            type="checkbox"
+            name="interests"
+            value="{{ option.value }}"
+            {% if option.value in selected_interests %}checked{% endif %}
+          >
+          <span class="choice-emoji">{{ option.emoji }}</span>
+          <span class="choice-title">{{ option.label }}</span>
+          <span class="choice-text">{{ option.description }}</span>
+        </label>
+        {% endfor %}
+      </div>
+      <button type="submit">Continue</button>
+    </form>
+  </div>
+</body>
+</html>

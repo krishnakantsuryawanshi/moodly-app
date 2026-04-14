@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messages | Moodly</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="topbar">
+    <div class="topbar-inner">
+        <a href="{{ url_for('feed') }}" class="brand-inline">Moodly</a>
+        <div class="topbar-links">
+            <a href="{{ url_for('feed') }}">Feed</a>
+            <a href="{{ url_for('my_profile') }}">My Profile</a>
+            <a href="{{ url_for('messages_index') }}">Messages{% if nav_conversations_count %} ({{ nav_conversations_count }}){% endif %}</a>
+            <a href="{{ url_for('settings') }}">Settings</a>
+            <a href="{{ url_for('logout') }}">Logout</a>
+        </div>
+    </div>
+</div>
+
+<main class="layout chat-layout">
+    <section class="main-column">
+        <section class="side-card">
+            <p class="feed-kicker">Inbox</p>
+            <h1 class="messages-title">Direct messages</h1>
+            <div class="conversation-list">
+                {% for conversation in conversations %}
+                <a href="{{ url_for('messages_chat', username=conversation.username) }}" class="conversation-row {% if active_user and active_user.username == conversation.username %}conversation-row-active{% endif %}">
+                    <span class="user-row-avatar {% if conversation.avatar_url %}avatar-photo{% endif %}">
+                        {% if conversation.avatar_url %}
+                        <img src="{{ conversation.avatar_url }}" alt="{{ conversation.username }}">
+                        {% else %}
+                        {{ conversation.avatar or conversation.username[0]|upper }}
+                        {% endif %}
+                    </span>
+                    <span class="conversation-copy">
+                        <strong>{{ conversation.username }}</strong>
+                        <small>{{ conversation.last_message }}</small>
+                    </span>
+                    <small>{{ conversation.updated_label }}</small>
+                </a>
+                {% endfor %}
+            </div>
+        </section>
+    </section>
+
+    <aside class="side-column">
+        <section class="composer-card chat-panel">
+            {% if active_user %}
+            <div class="chat-panel-head">
+                    <div class="post-head">
+                    <div class="post-avatar {% if active_user.avatar_url %}avatar-photo{% endif %}">
+                        {% if active_user.avatar_url %}
+                        <img src="{{ active_user.avatar_url }}" alt="{{ active_user.username }}">
+                        {% else %}
+                        {{ active_user.avatar or active_user.username[0]|upper }}
+                        {% endif %}
+                    </div>
+                    <div class="post-author">
+                        <span class="post-user-link">{{ active_user.username }}</span>
+                        <p class="post-meta">{{ active_user.bio or "Moodly chat" }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-messages">
+                {% for message in chat_messages %}
+                <div class="chat-bubble {% if message.sender == current_user.username %}chat-bubble-own{% endif %}">
+                    <strong>{{ "You" if message.sender == current_user.username else message.sender }}</strong>
+                    <p>{{ message.content }}</p>
+                    <small>{{ message.created_label }}</small>
+                </div>
+                {% endfor %}
+            </div>
+
+            <form method="POST" class="comment-form">
+                <input type="text" name="content" placeholder="Type a message..." required>
+                <button type="submit">Send</button>
+            </form>
+            {% else %}
+            <p class="feed-kicker">Open a chat</p>
+            <h3>Select a conversation</h3>
+            <p>Visit any profile and tap message to start chatting.</p>
+            {% endif %}
+        </section>
+    </aside>
+</main>
+</body>
+</html>

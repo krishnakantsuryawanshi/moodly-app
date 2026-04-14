@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Select Mood</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="setup-page">
+  <div class="setup-card setup-card-wide">
+    <div class="setup-hero">
+      <span class="setup-chip">Step 2</span>
+      <h2>Tell Moodly your current mood</h2>
+      <p>Your mood changes the style of posts, jokes, and motivation shown in the feed.</p>
+    </div>
+
+    {% if error %}
+    <p class="auth-error">{{ error }}</p>
+    {% endif %}
+
+    <form method="POST" class="mood-form">
+      {% for option in mood_options %}
+      <button
+        type="submit"
+        name="mood"
+        value="{{ option.value }}"
+        class="mood-card {% if selected_mood == option.value %}mood-card-active{% endif %}"
+      >
+        <span class="choice-emoji">{{ option.emoji }}</span>
+        <span class="choice-title">{{ option.label }}</span>
+        <span class="choice-text">{{ option.description }}</span>
+      </button>
+      {% endfor %}
+    </form>
+  </div>
+</body>
+</html>

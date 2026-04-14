@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ profile_user.username }} | Moodly</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="topbar">
+    <div class="topbar-inner">
+        <a href="{{ url_for('feed') }}" class="brand-inline">Moodly</a>
+        <div class="topbar-links">
+            <a href="{{ url_for('feed') }}">Feed</a>
+            <a href="{{ url_for('my_profile') }}">My Profile</a>
+            <a href="{{ url_for('messages_index') }}">Messages{% if nav_conversations_count %} ({{ nav_conversations_count }}){% endif %}</a>
+            <a href="{{ url_for('settings') }}">Settings</a>
+            <a href="{{ url_for('logout') }}">Logout</a>
+        </div>
+    </div>
+</div>
+
+<main class="layout">
+    <section class="main-column">
+        <div class="profile-hero">
+            <div class="profile-avatar-large {% if profile_user.avatar_url %}profile-avatar-photo{% endif %}">
+                {% if profile_user.avatar_url %}
+                <img src="{{ profile_user.avatar_url }}" alt="{{ profile_user.username }}">
+                {% else %}
+                {{ profile_user.avatar_label or profile_user.username[0]|upper }}
+                {% endif %}
+            </div>
+            <div class="profile-copy">
+                <p class="feed-kicker">Moodly Profile</p>
+                <h1>{{ profile_user.username }}</h1>
+                <p class="feed-subtitle">{{ profile_user.bio or "Moodly user" }}</p>
+                <div class="profile-stats">
+                    <span class="summary-pill">{{ profile_user.followers_count }} Followers</span>
+                    <span class="summary-pill">{{ profile_user.friends_count }} Friends</span>
+                </div>
+                <div class="summary-group">
+                    {% if selected_mood %}
+                    <span class="summary-pill">{{ selected_mood.emoji }} {{ selected_mood.label }}</span>
+                    {% endif %}
+                    {% for interest in selected_interests %}
+                    <span class="summary-pill">{{ interest.emoji }} {{ interest.label }}</span>
+                    {% endfor %}
+                </div>
+
+                <div class="followers-preview">
+                    <strong>Followers:</strong>
+                    {% if follower_users %}
+                        {% for follower in follower_users[:6] %}
+                        <a href="{{ url_for('profile', username=follower.username) }}" class="summary-pill follower-pill">{{ follower.username }}</a>
+                        {% endfor %}
+                    {% else %}
+                    <span class="summary-pill">No followers yet</span>
+                    {% endif %}
+                </div>
+
+                {% if not is_own_profile %}
+                <div class="post-actions">
+                    <form method="POST" action="{{ url_for('follow_user', username=profile_user.username) }}" class="inline-form">
+                        <input type="hidden" name="next_url" value="{{ request.path }}">
+                        <button type="submit">{{ "Unfollow" if relationship.is_following else "Follow" }}</button>
+                    </form>
+
+                    {% if relationship.is_friend %}
+                    <span class="ghost-btn">Friends</span>
+                    {% elif relationship.request_received %}
+                    <form method="POST" action="{{ url_for('respond_friend_request', username=profile_user.username) }}" class="inline-form">
+                        <input type="hidden" name="next_url" value="{{ request.path }}">
+                        <input type="hidden" name="action" value="accept">
+                        <button type="submit">Accept Friend</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('respond_friend_request', username=profile_user.username) }}" class="inline-form">
+                        <input type="hidden" name="next_url" value="{{ request.path }}">
+                        <input type="hidden" name="action" value="decline">
+                        <button type="submit" class="secondary-btn">Decline</button>
+                    </form>
+                    {% else %}
+                    <form method="POST" action="{{ url_for('send_friend_request', username=profile_user.username) }}" class="inline-form">
+                        <input type="hidden" name="next_url" value="{{ request.path }}">
+                        <button type="submit">{{ "Cancel Request" if relationship.request_sent else "Add Friend" }}</button>
+                    </form>
+                    {% endif %}
+
+                    <a href="{{ url_for('messages_chat', username=profile_user.username) }}" class="ghost-btn">Message</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if is_own_profile %}
+        <section class="composer-card">
+            <p class="feed-kicker">Create Post</p>
+            <h2>Share a text, image, or video</h2>
+
+            {% if profile_error %}
+            <p class="auth-error">{{ profile_error }}</p>
+            {% endif %}
+
+            <form method="POST" enctype="multipart/form-data" class="composer-form">
+                <input type="text" name="title" placeholder="Post title">
+                <textarea name="content" rows="4" placeholder="Write what you feel, post a joke, meme caption, or update..." required></textarea>
+
+                <div class="composer-grid">
+                    <select name="category" required>
+                        <option value="">Select category</option>
+                        {% for option in category_options %}
+                        <option value="{{ option.value }}">{{ option.emoji }} {{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+
+                    <select name="mood" required>
+                        <option value="">Select mood</option>
+                        {% for option in mood_options %}
+                        <option value="{{ option.value }}">{{ option.emoji }} {{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+
+                    <select name="language">
+                        <option value="mixed">Mixed</option>
+                        <option value="hindi">Hindi</option>
+                        <option value="english">English</option>
+                        <option value="hinglish">Hinglish</option>
+                    </select>
+
+                    <input type="file" name="media" accept="image/*,video/*">
+                </div>
+
+                <button type="submit" class="primary-btn">Post to Moodly</button>
+            </form>
+        </section>
+        {% endif %}
+
+        <section class="profile-posts">
+            <p class="feed-kicker">Posts</p>
+            <h2>{{ profile_user.username }}'s timeline</h2>
+
+            {% for post in posts %}
+            <article class="post-card">
+                <div class="post-head">
+                    <div class="post-avatar {% if post.avatar_url %}avatar-photo{% endif %}">
+                        {% if post.avatar_url %}
+                        <img src="{{ post.avatar_url }}" alt="{{ post.user }}">
+                        {% else %}
+                        {{ post.avatar_label or profile_user.username[0]|upper }}
+                        {% endif %}
+                    </div>
+                    <div class="post-author">
+                        <span class="post-user-link">{{ post.user }}</span>
+                        <p class="post-meta">{{ post.category }} | {{ post.mood }} | {{ post.language }} | {{ post.created_label }}</p>
+                    </div>
+                </div>
+
+                {% if post.title %}
+                <h3 class="post-title">{{ post.title }}</h3>
+                {% endif %}
+
+                <p class="post-body">{{ post.content }}</p>
+
+                {% if post.media_url %}
+                    {% if post.is_video %}
+                    <video class="post-media" controls>
+                        <source src="{{ post.media_url }}">
+                    </video>
+                    {% else %}
+                    <img class="post-media" src="{{ post.media_url }}" alt="{{ post.title or 'Post media' }}">
+                    {% endif %}
+                {% endif %}
+
+                <div class="post-actions">
+                    <form method="POST" action="{{ url_for('like_post', slug=post.slug) }}" class="inline-form">
+                        <input type="hidden" name="next_url" value="{{ request.path }}">
+                        <button type="submit">{{ "Unlike" if post.liked_by_me else "Like" }} &#10084; {{ post.likes_count }}</button>
+                    </form>
+                    <span class="ghost-btn">Comments {{ post.comments_count }}</span>
+                </div>
+            </article>
+            {% endfor %}
+
+            {% if not posts %}
+            <article class="post-card">
+                <h3>No posts yet</h3>
+                <p>{% if is_own_profile %}Create the first post from the box above.{% else %}This profile has not posted anything yet.{% endif %}</p>
+            </article>
+            {% endif %}
+        </section>
+    </section>
+
+    <aside class="side-column">
+        <section class="side-card">
+            <p class="feed-kicker">Followers</p>
+            <h3>{{ profile_user.followers_count }} people follow {{ profile_user.username }}</h3>
+            <div class="user-list">
+                {% for follower in follower_users %}
+                <a href="{{ url_for('profile', username=follower.username) }}" class="user-row">
+                    <span class="user-row-avatar {% if follower.avatar_url %}avatar-photo{% endif %}">
+                        {% if follower.avatar_url %}
+                        <img src="{{ follower.avatar_url }}" alt="{{ follower.username }}">
+                        {% else %}
+                        {{ follower.avatar_label or follower.username[0]|upper }}
+                        {% endif %}
+                    </span>
+                    <span class="user-row-copy">
+                        <strong>{{ follower.username }}</strong>
+                        <small>{{ follower.bio or "Moodly user" }}</small>
+                    </span>
+                </a>
+                {% endfor %}
+
+                {% if not follower_users %}
+                <p class="comment-empty">No followers yet.</p>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="side-card">
+            <p class="feed-kicker">Navigation</p>
+            <a href="{{ url_for('feed') }}" class="ghost-link">Back to feed</a>
+            {% if not is_own_profile %}
+            <a href="{{ url_for('messages_chat', username=profile_user.username) }}" class="ghost-link">Message {{ profile_user.username }}</a>
+            {% endif %}
+            {% if not is_own_profile %}
+            <a href="{{ url_for('my_profile') }}" class="ghost-link">Open my profile</a>
+            {% endif %}
+        </section>
+    </aside>
+</main>
+</body>
+</html>

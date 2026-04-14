@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Moodly Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Grand+Hotel&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="auth-page">
+    <div class="auth-shell">
+        <div class="auth-preview">
+            <div class="preview-card preview-card-main">
+                <div class="preview-top">
+                    <span class="preview-dot"></span>
+                    <span class="preview-dot"></span>
+                    <span class="preview-dot"></span>
+                </div>
+                <div class="preview-content">
+                    <div class="preview-story-row">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                    <div class="preview-post"></div>
+                    <div class="preview-lines">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+            </div>
+            <div class="preview-card preview-card-accent"></div>
+        </div>
+
+        <div class="auth-column">
+            <div class="auth-card">
+                <h1 class="brand">Moodly</h1>
+                <p class="auth-subtitle">Share moods, scroll stories, and stay connected.</p>
+
+                <form method="POST" class="auth-form">
+                    <input type="text" name="identity" placeholder="Phone number, username, or email" required>
+                    <input type="password" name="password" placeholder="Password" required>
+                    <button type="submit">Log in</button>
+                </form>
+
+                {% if error %}
+                <p class="auth-error">{{ error }}</p>
+                {% endif %}
+
+                <div class="auth-divider"><span>OR</span></div>
+                <p class="auth-alt">New to Moodly? <a href="{{ url_for('register') }}">Sign up</a></p>
+            </div>
+
+            <div class="auth-card auth-card-secondary">
+                <p>Don't have an account? <a href="{{ url_for('register') }}">Sign up</a></p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

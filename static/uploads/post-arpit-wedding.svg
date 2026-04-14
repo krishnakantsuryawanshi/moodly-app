@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
+  <rect width="1200" height="1200" fill="#fff7ed"/>
+  <rect x="110" y="120" width="980" height="960" rx="44" fill="#ffffff"/>
+  <rect x="170" y="210" width="860" height="540" rx="34" fill="#fed7aa"/>
+  <circle cx="600" cy="430" r="145" fill="#e4b18d"/>
+  <path d="M455 392c12-84 247-105 293-4-58-17-111-18-157-6-46 12-84 20-136 10Z" fill="#7c2d12"/>
+  <rect x="360" y="560" width="480" height="136" rx="40" fill="#f59e0b"/>
+  <text x="600" y="855" font-family="Arial, Helvetica, sans-serif" font-size="50" font-weight="700" text-anchor="middle" fill="#9a3412">WEDDING MODE</text>
+  <text x="600" y="925" font-family="Arial, Helvetica, sans-serif" font-size="38" text-anchor="middle" fill="#475569">Forced photos, free food, infinite rishtedars</text>
+</svg>

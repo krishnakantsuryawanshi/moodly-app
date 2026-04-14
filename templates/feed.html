@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Moodly Feed</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="topbar">
+    <div class="topbar-inner">
+        <a href="{{ url_for('feed') }}" class="brand-inline">Moodly</a>
+        <div class="topbar-links">
+            <a href="{{ url_for('feed') }}">Feed</a>
+            <a href="{{ url_for('my_profile') }}">My Profile</a>
+            <a href="{{ url_for('messages_index') }}">Messages{% if nav_conversations_count %} ({{ nav_conversations_count }}){% endif %}</a>
+            <a href="{{ url_for('settings') }}">Settings</a>
+            <a href="{{ url_for('logout') }}">Logout</a>
+        </div>
+    </div>
+</div>
+
+<main class="layout">
+    <section class="main-column">
+        <div class="feed-hero feed-hero-mood">
+            <div>
+                <p class="feed-kicker">Mood Switch</p>
+                <h1>Switch your vibe from the top bar</h1>
+                <p class="feed-subtitle">Your feed updates to show memes, jokes, motivation, and posts that match your selected mood.</p>
+            </div>
+            <div class="summary-group">
+                {% for interest in selected_interests %}
+                <span class="summary-pill">{{ interest.emoji }} {{ interest.label }}</span>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="mood-switcher">
+            {% for mood in mood_options %}
+            <a
+                href="{{ url_for('feed', mood=mood.value) }}"
+                class="mood-pill {% if selected_mood and selected_mood.value == mood.value %}mood-pill-active{% endif %}"
+            >
+                <span>{{ mood.emoji }}</span>
+                <span>{{ mood.label }}</span>
+            </a>
+            {% endfor %}
+        </div>
+
+        {% if feed_error %}
+        <article class="post-card">
+            <h3>Feed unavailable</h3>
+            <p>{{ feed_error }}</p>
+        </article>
+        {% endif %}
+
+        {% for post in posts %}
+        <article class="post-card">
+            <div class="post-head">
+                <div class="post-avatar {% if post.avatar_url %}avatar-photo{% endif %}">
+                    {% if post.avatar_url %}
+                    <img src="{{ post.avatar_url }}" alt="{{ post.user }}">
+                    {% else %}
+                    {{ post.avatar_label or "U" }}
+                    {% endif %}
+                </div>
+                <div class="post-author">
+                    {% if post.profile_username %}
+                    <a href="{{ url_for('profile', username=post.profile_username) }}" class="post-user-link">{{ post.user }}</a>
+                    {% else %}
+                    <span class="post-user-link">{{ post.user }}</span>
+                    {% endif %}
+                    <p class="post-meta">{{ post.category }} | {{ post.mood }} | {{ post.language }} | {{ post.created_label }}</p>
+                </div>
+            </div>
+
+            {% if post.title %}
+            <h3 class="post-title">{{ post.title }}</h3>
+            {% endif %}
+
+            <p class="post-body">{{ post.content }}</p>
+
+            {% if post.media_url %}
+                {% if post.is_video %}
+                <video class="post-media" controls>
+                    <source src="{{ post.media_url }}">
+                </video>
+                {% else %}
+                <img class="post-media" src="{{ post.media_url }}" alt="{{ post.title or 'Post media' }}">
+                {% endif %}
+            {% endif %}
+
+            <div class="post-tags">
+                <span>#{{ post.category }}</span>
+                <span>#{{ post.mood }}</span>
+            </div>
+
+            <div class="post-actions">
+                <form method="POST" action="{{ url_for('like_post', slug=post.slug) }}" class="inline-form">
+                    <input type="hidden" name="next_url" value="{{ request.full_path if request.query_string else request.path }}">
+                    <button type="submit">{{ "Unlike" if post.liked_by_me else "Like" }} &#10084; {{ post.likes_count }}</button>
+                </form>
+                <a href="#comment-{{ post.slug }}" class="ghost-btn">Comments {{ post.comments_count }}</a>
+                <a href="{% if post.profile_username %}{{ url_for('profile', username=post.profile_username) }}{% else %}#{% endif %}" class="ghost-btn">View profile</a>
+            </div>
+
+            <div class="comments-block" id="comment-{{ post.slug }}">
+                {% if post.comments %}
+                    {% for comment in post.comments %}
+                    <div class="comment-row">
+                        <strong>{{ comment.username }}</strong>
+                        <span>{{ comment.content }}</span>
+                        <small>{{ comment.created_label }}</small>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <p class="comment-empty">No comments yet. Start the thread.</p>
+                {% endif %}
+
+                <form method="POST" action="{{ url_for('comment_post', slug=post.slug) }}" class="comment-form">
+                    <input type="hidden" name="next_url" value="{{ request.full_path if request.query_string else request.path }}">
+                    <input type="text" name="comment" placeholder="Add a comment..." required>
+                    <button type="submit">Reply</button>
+                </form>
+            </div>
+        </article>
+        {% endfor %}
+
+        {% if not posts and not feed_error %}
+        <article class="post-card">
+            <h3>No posts found</h3>
+            <p>Try changing the mood from the top switcher or update your categories.</p>
+        </article>
+        {% endif %}
+    </section>
+
+    <aside class="side-column">
+        <section class="side-card">
+            <p class="feed-kicker">Current Mood</p>
+            <h3>{{ selected_mood.emoji if selected_mood else "" }} {{ selected_mood.label if selected_mood else "Pick one" }}</h3>
+            <p>{{ selected_mood.description if selected_mood else "Choose a mood to personalize the feed." }}</p>
+        </section>
+
+        <section class="side-card">
+            <p class="feed-kicker">People</p>
+            <h3>Visit other profiles</h3>
+            <div class="user-list">
+                {% for user in suggested_users %}
+                <div class="user-card">
+                    <a href="{{ url_for('profile', username=user.username) }}" class="user-row">
+                        <span class="user-row-avatar {% if user.avatar_url %}avatar-photo{% endif %}">
+                            {% if user.avatar_url %}
+                            <img src="{{ user.avatar_url }}" alt="{{ user.username }}">
+                            {% else %}
+                            {{ user.avatar_label or user.username[0]|upper }}
+                            {% endif %}
+                        </span>
+                        <span class="user-row-copy">
+                            <strong>{{ user.username }}</strong>
+                            <small>{{ user.followers_count }} followers • {{ user.friends_count }} friends</small>
+                        </span>
+                    </a>
+                    <div class="user-card-actions">
+                        <form method="POST" action="{{ url_for('follow_user', username=user.username) }}" class="inline-form">
+                            <input type="hidden" name="next_url" value="{{ request.full_path if request.query_string else request.path }}">
+                            <button type="submit">{{ "Unfollow" if user.is_following else "Follow" }}</button>
+                        </form>
+                        {% if user.is_friend %}
+                        <span class="ghost-btn">Friends</span>
+                        {% elif user.request_received %}
+                        <form method="POST" action="{{ url_for('respond_friend_request', username=user.username) }}" class="inline-form">
+                            <input type="hidden" name="next_url" value="{{ request.full_path if request.query_string else request.path }}">
+                            <input type="hidden" name="action" value="accept">
+                            <button type="submit">Accept</button>
+                        </form>
+                        {% else %}
+                        <form method="POST" action="{{ url_for('send_friend_request', username=user.username) }}" class="inline-form">
+                            <input type="hidden" name="next_url" value="{{ request.full_path if request.query_string else request.path }}">
+                            <button type="submit">{{ "Cancel Request" if user.request_sent else "Add Friend" }}</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+    </aside>
+</main>
+</body>
+</html>

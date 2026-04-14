@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
+  <rect width="1200" height="1200" fill="#f5f3ff"/>
+  <rect x="70" y="70" width="1060" height="220" rx="40" fill="#312e81"/>
+  <text x="600" y="150" font-family="Arial, Helvetica, sans-serif" font-size="66" font-weight="700" text-anchor="middle" fill="#ffffff">ME OPENING NOTES</text>
+  <text x="600" y="230" font-family="Arial, Helvetica, sans-serif" font-size="66" font-weight="700" text-anchor="middle" fill="#ffffff">ONE NIGHT BEFORE EXAM</text>
+  <rect x="130" y="340" width="940" height="560" rx="36" fill="#ddd6fe"/>
+  <rect x="250" y="430" width="700" height="350" rx="26" fill="#ffffff"/>
+  <rect x="300" y="490" width="600" height="26" rx="13" fill="#c4b5fd"/>
+  <rect x="300" y="550" width="520" height="26" rx="13" fill="#c4b5fd"/>
+  <rect x="300" y="610" width="560" height="26" rx="13" fill="#c4b5fd"/>
+  <circle cx="850" cy="655" r="74" fill="#fca5a5"/>
+  <text x="850" y="675" font-family="Arial, Helvetica, sans-serif" font-size="70" font-weight="700" text-anchor="middle" fill="#7f1d1d">?!</text>
+  <text x="600" y="1025" font-family="Arial, Helvetica, sans-serif" font-size="54" font-weight="700" text-anchor="middle" fill="#312e81">BRAIN BUFFERING... PLEASE TRY AGAIN TOMORROW</text>
+</svg>
