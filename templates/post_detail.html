@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ post.title or post.user ~ "'s Post" }} | Moodly</title>
+    <meta name="theme-color" content="#ea7a4c">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json', v=ASSET_VERSION) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=ASSET_VERSION) }}">
+</head>
+<body>
+<div class="topbar">
+    <div class="topbar-inner">
+        <a href="{{ url_for('feed') }}" class="brand-inline">Moodly</a>
+        <div class="topbar-links">
+            <a href="{{ url_for('feed') }}">Feed</a>
+            <a href="{{ url_for('my_profile') }}">My Profile</a>
+            <a href="{{ url_for('messages_index') }}">Messages{% if nav_conversations_count %} ({{ nav_conversations_count }}){% endif %}</a>
+            <a href="{{ url_for('guidelines') }}">Guidelines</a>
+            <a href="{{ url_for('logout') }}">Logout</a>
+        </div>
+    </div>
+</div>
+
+<main class="layout">
+    <section class="main-column">
+        {% if ui_notices %}
+        <section class="notice-stack">
+            {% for notice in ui_notices %}
+            <article class="notice-banner notice-banner-{{ notice.kind }}">{{ notice.message }}</article>
+            {% endfor %}
+        </section>
+        {% endif %}
+
+        <article class="post-card">
+            <div class="post-head">
+                <div class="post-avatar {% if post.avatar_url %}avatar-photo{% endif %}">
+                    {% if post.avatar_url %}
+                    <img src="{{ post.avatar_url }}" alt="{{ post.user }}">
+                    {% else %}
+                    {{ post.avatar_label or "U" }}
+                    {% endif %}
+                </div>
+                <div class="post-author">
+                    <a href="{{ post.profile_url }}" class="post-user-link">{{ post.user }}</a>
+                    <p class="post-meta">{{ post.category }} | {{ post.mood }} | {{ post.language }} | {{ post.created_label }}</p>
+                </div>
+                <details class="post-menu">
+                    <summary class="post-menu-trigger" aria-label="Post options">...</summary>
+                    <div class="profile-menu-sheet post-menu-sheet">
+                        <button type="button" class="menu-action-btn" data-copy-text="{{ post.post_id }}">Copy post ID</button>
+                        <button type="button" class="menu-action-btn" data-copy-text="{{ post.post_url_external }}">Copy post link</button>
+                        <button type="button" class="menu-action-btn" data-share-url="{{ post.post_url_external }}" data-share-title="{{ post.title or ('@' ~ post.user ~ ' post') }}">Share post</button>
+                    </div>
+                </details>
+            </div>
+
+            {% if post.title %}
+            <h1 class="post-title">{{ post.title }}</h1>
+            {% endif %}
+            <p class="post-body">{{ post.content }}</p>
+
+            {% if post.media_url %}
+            <div class="post-media-shell">
+                {% if post.is_video %}
+                <video class="post-media" controls>
+                    <source src="{{ post.media_url }}">
+                </video>
+                {% else %}
+                <img class="post-media" src="{{ post.media_url }}" alt="{{ post.title or 'Post media' }}">
+                {% endif %}
+                {% if post.show_saved_watermark %}
+                <div class="media-watermark">{{ post.watermark_label }}</div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <div class="post-tags">
+                <span>#{{ post.category }}</span>
+                <span>#{{ post.mood }}</span>
+                <span>#{{ post.post_id }}</span>
+            </div>
+
+            <div class="post-actions">
+                <form method="POST" action="{{ url_for('save_post', slug=post.slug) }}" class="inline-form">
+                    <input type="hidden" name="next_url" value="{{ request.path }}">
+                    <button type="submit" class="secondary-btn">{{ "Saved" if post.saved_by_me else "Save" }} {{ post.saves_count }}</button>
+                </form>
+                <a href="{{ post.profile_url }}" class="ghost-btn">Open profile</a>
+                <button type="button" class="ghost-btn" data-share-url="{{ post.post_url_external }}" data-share-title="{{ post.title or ('@' ~ post.user ~ ' post') }}">Share</button>
+            </div>
+        </article>
+    </section>
+
+    <aside class="side-column">
+        <section class="side-card">
+            <p class="feed-kicker">Post Info</p>
+            <h3>Shareable ID</h3>
+            <p>{{ post.post_id }}</p>
+        </section>
+        {% if author %}
+        <section class="side-card">
+            <p class="feed-kicker">Uploader</p>
+            <h3>@{{ author.username }}</h3>
+            <p>{{ author.bio or "Moodly user" }}</p>
+            <a href="{{ url_for('profile', username=author.username) }}" class="ghost-btn">Open profile</a>
+        </section>
+        {% endif %}
+    </aside>
+</main>
+<script src="{{ url_for('static', filename='app.js', v=ASSET_VERSION) }}" defer></script>
+</body>
+</html>

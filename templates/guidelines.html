@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guidelines | Moodly</title>
+    <meta name="theme-color" content="#ea7a4c">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json', v=ASSET_VERSION) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=ASSET_VERSION) }}">
+</head>
+<body>
+<div class="topbar">
+    <div class="topbar-inner">
+        <a href="{{ url_for('feed') }}" class="brand-inline">Moodly</a>
+        <div class="topbar-links">
+            <a href="{{ url_for('feed') }}">Feed</a>
+            <a href="{{ url_for('my_profile') }}">My Profile</a>
+            <a href="{{ url_for('messages_index') }}">Messages{% if nav_conversations_count %} ({{ nav_conversations_count }}){% endif %}</a>
+            <a href="{{ url_for('guidelines') }}">Guidelines</a>
+            <a href="{{ url_for('settings') }}">Settings</a>
+            <a href="{{ url_for('logout') }}">Logout</a>
+        </div>
+    </div>
+</div>
+
+<main class="layout">
+    <section class="main-column">
+        {% if ui_notices %}
+        <section class="notice-stack">
+            {% for notice in ui_notices %}
+            <article class="notice-banner notice-banner-{{ notice.kind }}">{{ notice.message }}</article>
+            {% endfor %}
+        </section>
+        {% endif %}
+
+        <section class="composer-card">
+            <p class="feed-kicker">Safety Policy</p>
+            <h1 class="messages-title">Moodly Community Guidelines</h1>
+            <p class="feed-subtitle">These rules cover chats, comments, posts, stories, reels, blocking, reporting, and sharing.</p>
+        </section>
+
+        {% for section in policy_sections %}
+        <section class="side-card guideline-card">
+            <h2>{{ section.title }}</h2>
+            <div class="guideline-list">
+                {% for item in section.items %}
+                <p>{{ item }}</p>
+                {% endfor %}
+            </div>
+        </section>
+        {% endfor %}
+    </section>
+
+    <aside class="side-column">
+        <section class="side-card">
+            <p class="feed-kicker">Moderation</p>
+            <h3>How Moodly responds</h3>
+            <p>Abusive chat words are masked as `****` for the receiver. Dirty or abusive post text is blocked before publishing.</p>
+        </section>
+        <section class="side-card">
+            <p class="feed-kicker">Profile Safety</p>
+            <h3>Quick tools</h3>
+            <p>Use the three-dot menus in profiles, chats, and posts to copy IDs, share links, report users, or block them.</p>
+        </section>
+    </aside>
+</main>
+<script src="{{ url_for('static', filename='app.js', v=ASSET_VERSION) }}" defer></script>
+</body>
+</html>

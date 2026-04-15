@@ -17,6 +17,7 @@
             <a href="{{ url_for('my_profile') }}">My Profile</a>
             <a href="{{ url_for('my_profile') }}#friend-requests">Requests{% if nav_friend_requests_count %} ({{ nav_friend_requests_count }}){% endif %}</a>
             <a href="{{ url_for('messages_index') }}">Messages{% if nav_conversations_count %} ({{ nav_conversations_count }}){% endif %}</a>
+            <a href="{{ url_for('guidelines') }}">Guidelines</a>
             <a href="{{ url_for('settings') }}">Settings</a>
             <a href="{{ url_for('logout') }}">Logout</a>
         </div>
@@ -25,6 +26,14 @@
 
 <main class="layout">
     <section class="main-column">
+        {% if ui_notices %}
+        <section class="notice-stack">
+            {% for notice in ui_notices %}
+            <article class="notice-banner notice-banner-{{ notice.kind }}">{{ notice.message }}</article>
+            {% endfor %}
+        </section>
+        {% endif %}
+
         <div class="feed-hero feed-hero-mood feed-hero-grid">
             <div class="feed-hero-copy">
                 <p class="feed-kicker">Mood Switch</p>
@@ -79,11 +88,23 @@
         <div class="mood-switcher">
             {% for mood in mood_options %}
             <a
-                href="{{ url_for('feed', mood=mood.value) }}"
+                href="{{ url_for('feed', mood=mood.value, username=username_query, view=selected_feed_view) }}"
                 class="mood-pill {% if selected_mood and selected_mood.value == mood.value %}mood-pill-active{% endif %}"
             >
                 <span>{{ mood.emoji }}</span>
                 <span>{{ mood.label }}</span>
+            </a>
+            {% endfor %}
+        </div>
+
+        <div class="feed-filter-row">
+            {% for option in feed_view_options %}
+            <a
+                href="{{ url_for('feed', mood=selected_mood.value if selected_mood else None, username=username_query, view=option.value) }}"
+                class="feed-filter-pill {% if selected_feed_view == option.value %}feed-filter-pill-active{% endif %}"
+            >
+                <strong>{{ option.label }}</strong>
+                <span>{{ option.description }}</span>
             </a>
             {% endfor %}
         </div>
@@ -228,6 +249,15 @@
                     {% endif %}
                     <p class="post-meta">{{ post.category }} | {{ post.mood }} | {{ post.language }} | {{ post.created_label }}</p>
                 </div>
+                <details class="post-menu">
+                    <summary class="post-menu-trigger" aria-label="Post options">...</summary>
+                    <div class="profile-menu-sheet post-menu-sheet">
+                        <a href="{{ post.post_url }}" class="menu-action-link">Open post</a>
+                        <button type="button" class="menu-action-btn" data-copy-text="{{ post.post_id }}">Copy post ID</button>
+                        <button type="button" class="menu-action-btn" data-copy-text="{{ post.post_url_external }}">Copy post link</button>
+                        <button type="button" class="menu-action-btn" data-share-url="{{ post.post_url_external }}" data-share-title="{{ post.title or ('@' ~ post.user ~ ' post') }}">Share post</button>
+                    </div>
+                </details>
             </div>
 
             {% if post.title %}
@@ -237,6 +267,7 @@
             <p class="post-body">{{ post.content }}</p>
 
             {% if post.media_url %}
+                <div class="post-media-shell">
                 {% if post.is_video %}
                 <video class="post-media" controls>
                     <source src="{{ post.media_url }}">
@@ -244,6 +275,10 @@
                 {% else %}
                 <img class="post-media" src="{{ post.media_url }}" alt="{{ post.title or 'Post media' }}">
                 {% endif %}
+                {% if post.show_saved_watermark %}
+                <div class="media-watermark">{{ post.watermark_label }}</div>
+                {% endif %}
+                </div>
             {% endif %}
 
             <div class="post-tags">

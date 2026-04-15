@@ -17,6 +17,7 @@
             <a href="{{ url_for('my_profile') }}">My Profile</a>
             <a href="{{ url_for('my_profile') }}#friend-requests">Requests{% if nav_friend_requests_count %} ({{ nav_friend_requests_count }}){% endif %}</a>
             <a href="{{ url_for('messages_index') }}">Messages{% if nav_conversations_count %} ({{ nav_conversations_count }}){% endif %}</a>
+            <a href="{{ url_for('guidelines') }}">Guidelines</a>
             <a href="{{ url_for('settings') }}">Settings</a>
             <a href="{{ url_for('logout') }}">Logout</a>
         </div>
@@ -25,6 +26,14 @@
 
 <main class="layout">
     <section class="main-column">
+        {% if ui_notices %}
+        <section class="notice-stack">
+            {% for notice in ui_notices %}
+            <article class="notice-banner notice-banner-{{ notice.kind }}">{{ notice.message }}</article>
+            {% endfor %}
+        </section>
+        {% endif %}
+
         <div class="profile-cover-card">
             <div class="profile-cover-media">
                 {% if profile_user.cover_url %}
@@ -49,6 +58,9 @@
             <details class="profile-menu">
                 <summary class="profile-menu-trigger" aria-label="More options">...</summary>
                 <div class="profile-menu-sheet">
+                    <button type="button" class="menu-action-btn" data-copy-text="{{ profile_user.username }}">Copy user ID</button>
+                    <button type="button" class="menu-action-btn" data-copy-text="{{ url_for('profile', username=profile_user.username, _external=True) }}">Copy profile link</button>
+                    <button type="button" class="menu-action-btn" data-share-url="{{ url_for('profile', username=profile_user.username, _external=True) }}" data-share-title="@{{ profile_user.username }}">Share profile</button>
                     <form method="POST" action="{{ url_for('report_user', username=profile_user.username) }}" class="profile-menu-form">
                         <input type="hidden" name="next_url" value="{{ request.path }}">
                         <button type="submit" class="menu-action-btn">Report user</button>
@@ -141,7 +153,7 @@
                 <div class="profile-actions">
                     <form method="POST" action="{{ url_for('follow_user', username=profile_user.username) }}" class="inline-form">
                         <input type="hidden" name="next_url" value="{{ request.path }}">
-                        <button type="submit" class="action-btn action-btn-follow" {% if relationship.has_blocked %}disabled{% endif %}>
+                        <button type="submit" class="action-btn action-btn-follow" {% if relationship.is_blocked %}disabled{% endif %}>
                             <span class="action-btn-label">{{ "Following" if relationship.is_following else "Follow" }}</span>
                             <span class="action-btn-meta">{{ "Tap to unfollow" if relationship.is_following else "See updates first" }}</span>
                         </button>
@@ -166,14 +178,14 @@
                     {% else %}
                     <form method="POST" action="{{ url_for('send_friend_request', username=profile_user.username) }}" class="inline-form">
                         <input type="hidden" name="next_url" value="{{ request.path }}">
-                        <button type="submit" class="action-btn action-btn-friend" {% if relationship.has_blocked %}disabled{% endif %}>
+                        <button type="submit" class="action-btn action-btn-friend" {% if relationship.is_blocked %}disabled{% endif %}>
                             <span class="action-btn-label">{{ "Request Sent" if relationship.request_sent else "Add Friend" }}</span>
                             <span class="action-btn-meta">{{ "Tap to cancel request" if relationship.request_sent else "For direct connection" }}</span>
                         </button>
                     </form>
                     {% endif %}
 
-                    {% if relationship.has_blocked %}
+                    {% if relationship.is_blocked %}
                     <span class="ghost-btn action-btn-message action-link-disabled">
                         <span class="action-btn-label">Message</span>
                         <span class="action-btn-meta">Unavailable while blocked</span>
@@ -185,8 +197,8 @@
                     </a>
                     {% endif %}
                 </div>
-                {% if relationship.has_blocked %}
-                <p class="auth-error">You blocked this user. Unblock from the top-right menu to follow, friend, or message again.</p>
+                {% if relationship.is_blocked %}
+                <p class="auth-error">{% if relationship.has_blocked %}You blocked this user.{% else %}This user blocked you.{% endif %} Unblock access is required before follow, friend, or message actions work again.</p>
                 {% endif %}
                 {% endif %}
             </div>
@@ -319,6 +331,15 @@
                         <span class="post-user-link">{{ post.user }}</span>
                         <p class="post-meta">{{ post.category }} | {{ post.mood }} | {{ post.language }} | {{ post.created_label }}</p>
                     </div>
+                    <details class="post-menu">
+                        <summary class="post-menu-trigger" aria-label="Post options">...</summary>
+                        <div class="profile-menu-sheet post-menu-sheet">
+                            <a href="{{ post.post_url }}" class="menu-action-link">Open post</a>
+                            <button type="button" class="menu-action-btn" data-copy-text="{{ post.post_id }}">Copy post ID</button>
+                            <button type="button" class="menu-action-btn" data-copy-text="{{ post.post_url_external }}">Copy post link</button>
+                            <button type="button" class="menu-action-btn" data-share-url="{{ post.post_url_external }}" data-share-title="{{ post.title or ('@' ~ post.user ~ ' post') }}">Share post</button>
+                        </div>
+                    </details>
                 </div>
 
                 {% if post.title %}
@@ -328,6 +349,7 @@
                 <p class="post-body">{{ post.content }}</p>
 
                 {% if post.media_url %}
+                    <div class="post-media-shell">
                     {% if post.is_video %}
                     <video class="post-media" controls>
                         <source src="{{ post.media_url }}">
@@ -335,6 +357,10 @@
                     {% else %}
                     <img class="post-media" src="{{ post.media_url }}" alt="{{ post.title or 'Post media' }}">
                     {% endif %}
+                    {% if post.show_saved_watermark %}
+                    <div class="media-watermark">{{ post.watermark_label }}</div>
+                    {% endif %}
+                    </div>
                 {% endif %}
 
                 <div class="post-actions">
@@ -383,8 +409,23 @@
                 <h3 class="post-title">{{ post.title }}</h3>
                 {% endif %}
                 <p class="post-body">{{ post.content }}</p>
+                {% if post.media_url %}
+                <div class="post-media-shell">
+                    {% if post.is_video %}
+                    <video class="post-media" controls>
+                        <source src="{{ post.media_url }}">
+                    </video>
+                    {% else %}
+                    <img class="post-media" src="{{ post.media_url }}" alt="{{ post.title or 'Saved post media' }}">
+                    {% endif %}
+                    {% if post.author_username != current_user.username %}
+                    <div class="media-watermark">{{ post.watermark_label }}</div>
+                    {% endif %}
+                </div>
+                {% endif %}
                 <div class="post-actions">
                     <a href="{{ url_for('profile', username=post.profile_username) }}" class="ghost-btn">Open profile</a>
+                    <a href="{{ post.post_url }}" class="ghost-btn">Open post</a>
                     <form method="POST" action="{{ url_for('save_post', slug=post.slug) }}" class="inline-form">
                         <input type="hidden" name="next_url" value="{{ request.path }}">
                         <button type="submit" class="secondary-btn">Remove save</button>

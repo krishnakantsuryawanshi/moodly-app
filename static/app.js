@@ -39,3 +39,45 @@ window.addEventListener("load", () => {
     button.hidden = true;
   });
 });
+
+async function copyText(value) {
+  if (!value) return;
+
+  try {
+    await navigator.clipboard.writeText(value);
+    window.alert("Copied.");
+  } catch (_) {
+    window.prompt("Copy this text:", value);
+  }
+}
+
+async function shareUrl(url, title) {
+  if (!url) return;
+
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: title || "Moodly", url });
+      return;
+    } catch (_) {
+      // Fall back to copy if share is dismissed or unavailable.
+    }
+  }
+
+  await copyText(url);
+}
+
+document.addEventListener("click", (event) => {
+  const copyTrigger = event.target.closest("[data-copy-text]");
+  if (copyTrigger) {
+    copyText(copyTrigger.getAttribute("data-copy-text"));
+    return;
+  }
+
+  const shareTrigger = event.target.closest("[data-share-url]");
+  if (shareTrigger) {
+    shareUrl(
+      shareTrigger.getAttribute("data-share-url"),
+      shareTrigger.getAttribute("data-share-title"),
+    );
+  }
+});

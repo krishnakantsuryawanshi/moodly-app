@@ -17,6 +17,7 @@
             <a href="{{ url_for('my_profile') }}">My Profile</a>
             <a href="{{ url_for('my_profile') }}#friend-requests">Requests{% if nav_friend_requests_count %} ({{ nav_friend_requests_count }}){% endif %}</a>
             <a href="{{ url_for('messages_index') }}">Messages{% if nav_conversations_count %} ({{ nav_conversations_count }}){% endif %}</a>
+            <a href="{{ url_for('guidelines') }}">Guidelines</a>
             <a href="{{ url_for('settings') }}">Settings</a>
             <a href="{{ url_for('logout') }}">Logout</a>
         </div>
@@ -25,6 +26,14 @@
 
 <main class="layout chat-layout">
     <section class="main-column">
+        {% if ui_notices %}
+        <section class="notice-stack">
+            {% for notice in ui_notices %}
+            <article class="notice-banner notice-banner-{{ notice.kind }}">{{ notice.message }}</article>
+            {% endfor %}
+        </section>
+        {% endif %}
+
         <section class="side-card">
             <p class="feed-kicker">Inbox</p>
             <h1 class="messages-title">Direct messages</h1>
@@ -91,7 +100,7 @@
         <section class="composer-card chat-panel">
             {% if active_user %}
             <div class="chat-panel-head">
-                    <div class="post-head">
+                <div class="post-head">
                     <div class="post-avatar {% if active_user.avatar_url %}avatar-photo{% endif %}">
                         {% if active_user.avatar_url %}
                         <img src="{{ active_user.avatar_url }}" alt="{{ active_user.username }}">
@@ -105,6 +114,19 @@
                         <small class="chat-presence">{{ active_user.last_seen_label }}</small>
                     </div>
                 </div>
+                <details class="post-menu">
+                    <summary class="post-menu-trigger" aria-label="Chat options">...</summary>
+                    <div class="profile-menu-sheet post-menu-sheet">
+                        <a href="{{ url_for('profile', username=active_user.username) }}" class="menu-action-link">Open profile</a>
+                        <button type="button" class="menu-action-btn" data-copy-text="{{ active_user.username }}">Copy user ID</button>
+                        <button type="button" class="menu-action-btn" data-copy-text="{{ url_for('profile', username=active_user.username, _external=True) }}">Copy profile link</button>
+                        <button type="button" class="menu-action-btn" data-share-url="{{ url_for('profile', username=active_user.username, _external=True) }}" data-share-title="@{{ active_user.username }}">Share profile</button>
+                        <form method="POST" action="{{ url_for('block_user', username=active_user.username) }}" class="profile-menu-form">
+                            <input type="hidden" name="next_url" value="{{ url_for('messages_index') }}">
+                            <button type="submit" class="menu-action-btn menu-action-btn-danger">Block user</button>
+                        </form>
+                    </div>
+                </details>
             </div>
 
             <div class="chat-messages">

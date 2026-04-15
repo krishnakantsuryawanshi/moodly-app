@@ -53,6 +53,65 @@ MOOD_OPTIONS = [
     {"value": "focused", "label": "Focused", "emoji": "\U0001F9E0", "description": "Sharper content for grind mode."},
 ]
 
+FEED_VIEW_OPTIONS = [
+    {"value": "all", "label": "All", "description": "Everything in your feed."},
+    {"value": "user_posts", "label": "User Posts", "description": "Only posts uploaded by users."},
+    {"value": "reels", "label": "Reels", "description": "Only user-posted videos and reels."},
+]
+
+CONTENT_POLICY_SECTIONS = [
+    {
+        "title": "Respect People",
+        "items": [
+            "Do not use abusive, threatening, hateful, or sexually degrading language in chats, comments, stories, or posts.",
+            "Do not target people with harassment, repeated insults, bullying, or humiliation.",
+            "Blocking someone means they should no longer be able to message or interact with you.",
+        ],
+    },
+    {
+        "title": "Keep Posts Clean",
+        "items": [
+            "Dirty captions, explicit text, and abusive post copy are not allowed.",
+            "If a post or story includes harmful text, Moodly blocks publishing and asks the user to rewrite it.",
+            "Users can report accounts from profile menus if content still feels unsafe or inappropriate.",
+        ],
+    },
+    {
+        "title": "Chat Safety",
+        "items": [
+            "If someone sends abusive language, Moodly warns the sender and masks the abusive words before delivery.",
+            "Blocked users cannot continue chats, send new message requests, or reopen contact through inbox actions.",
+            "Message requests must be accepted before private chatting is unlocked.",
+        ],
+    },
+]
+
+PROHIBITED_TERMS = (
+    "asshole",
+    "bastard",
+    "bhenchod",
+    "behenchod",
+    "bhosdike",
+    "bitch",
+    "chutiya",
+    "dick",
+    "fuck",
+    "gandu",
+    "harami",
+    "haraami",
+    "lund",
+    "madarchod",
+    "motherfucker",
+    "randi",
+    "shit",
+    "slut",
+    "whore",
+)
+PROHIBITED_TERMS_PATTERN = re.compile(
+    r"\b(" + "|".join(re.escape(term) for term in PROHIBITED_TERMS) + r")\b",
+    re.IGNORECASE,
+)
+
 
 def get_db():
     return get_database()
@@ -73,7 +132,7 @@ def get_option_map(options):
 
 @app.context_processor
 def inject_asset_version():
-    return {"ASSET_VERSION": ASSET_VERSION}
+    return {"ASSET_VERSION": ASSET_VERSION, "ui_notices": pop_ui_notices()}
 
 
 @app.after_request
@@ -90,6 +149,18 @@ def get_current_user():
     if not username:
         return None
     return get_db().users.find_one({"username": username})
+
+
+def push_ui_notice(kind, message):
+    notices = session.get("_ui_notices", [])
+    notices.append({"kind": kind, "message": message})
+    session["_ui_notices"] = notices[-4:]
+    session.modified = True
+
+
+def pop_ui_notices():
+    notices = session.pop("_ui_notices", [])
+    return notices if isinstance(notices, list) else []
 
 
 def get_avatar_for_username(username):
@@ -133,6 +204,84 @@ def with_social_defaults(user):
     return normalized
 
 
+def get_feed_view_value(value):
+    allowed = {option["value"] for option in FEED_VIEW_OPTIONS}
+    return value if value in allowed else "all"
+
+
+def get_profile_link(username, external=False):
+    return url_for("profile", username=username, _external=external)
+
+
+def get_post_link(slug, external=False):
+    return url_for("post_detail", slug=slug, _external=external)
+
+
+def find_prohibited_terms(text):
+    if not text:
+        return []
+    return sorted({match.group(0).lower() for match in PROHIBITED_TERMS_PATTERN.finditer(text)})
+
+
+def contains_prohibited_terms(*values):
+    terms = set()
+    for value in values:
+        terms.update(find_prohibited_terms(value))
+    return sorted(terms)
+
+
+def mask_prohibited_terms(text):
+    if not text:
+        return text
+
+    return PROHIBITED_TERMS_PATTERN.sub(lambda match: "*" * max(4, len(match.group(0))), text)
+
+
+def validate_clean_copy(*values):
+    terms = contains_prohibited_terms(*values)
+    if not terms:
+        return None
+    return "Warning: abusive or dirty words are not allowed here. Rewrite the text and try again."
+
+
+def moderate_chat_copy(content):
+    terms = contains_prohibited_terms(content)
+    if not terms:
+        return content, None
+    return mask_prohibited_terms(content), "Warning: abusive words were masked before this message was delivered."
+
+
+def is_user_blocked(current_user, other_user):
+    current_user = with_social_defaults(current_user)
+    other_user = with_social_defaults(other_user)
+    current_username = (current_user or {}).get("username")
+    other_username = (other_user or {}).get("username")
+    if not current_username or not other_username or current_username == other_username:
+        return False
+    return (
+        other_username in current_user.get("blocked_users", [])
+        or current_username in other_user.get("blocked_users", [])
+    )
+
+
+def get_blocked_usernames(current_user):
+    current_user = with_social_defaults(current_user)
+    current_username = current_user.get("username")
+    blocked = set(current_user.get("blocked_users", []))
+    if not current_username:
+        return blocked
+    for user in get_db().users.find({}, {"username": 1, "blocked_users": 1}):
+        if current_username in (user or {}).get("blocked_users", []):
+            blocked.add(user["username"])
+    return blocked
+
+
+def build_post_watermark(author_username):
+    if not author_username:
+        return ""
+    return f"Uploaded by @{author_username}"
+
+
 def sync_social_defaults():
     db = get_db()
     for user in db.users.find(
@@ -172,17 +321,23 @@ def build_relationship_state(current_user, viewed_user):
             "request_sent": False,
             "request_received": False,
             "has_blocked": False,
+            "blocked_by_user": False,
+            "is_blocked": False,
             "can_message_direct": False,
         }
 
     current_user = with_social_defaults(current_user)
     viewed_user = with_social_defaults(viewed_user)
+    has_blocked = viewed_username in current_user.get("blocked_users", [])
+    blocked_by_user = current_username in viewed_user.get("blocked_users", [])
     return {
         "is_following": current_username in viewed_user.get("followers", []),
         "is_friend": viewed_username in current_user.get("friends", []),
         "request_sent": viewed_username in current_user.get("friend_requests_sent", []),
         "request_received": viewed_username in current_user.get("friend_requests_received", []),
-        "has_blocked": viewed_username in current_user.get("blocked_users", []),
+        "has_blocked": has_blocked,
+        "blocked_by_user": blocked_by_user,
+        "is_blocked": has_blocked or blocked_by_user,
         "can_message_direct": viewed_username in current_user.get("friends", []),
     }
 
@@ -236,6 +391,7 @@ def normalize_conversation_preview(thread, current_username, user_doc):
         "username": other_user,
         "avatar": (user_doc or {}).get("avatar", get_avatar_for_username(other_user)),
         "avatar_url": (user_doc or {}).get("avatar_url"),
+        "profile_url": get_profile_link(other_user),
         "is_active": is_user_active(user_doc),
         "last_message": preview_text,
         "updated_label": format_created_label(thread.get("updated_at")),
@@ -392,6 +548,10 @@ def normalize_post(post, current_username=None):
     )
     normalized["is_video"] = normalized.get("media_type") == "video"
     normalized["profile_username"] = normalized.get("author_username")
+    normalized["profile_url"] = get_profile_link(normalized.get("author_username")) if normalized.get("author_username") else None
+    normalized["post_url"] = get_post_link(normalized.get("slug")) if normalized.get("slug") else None
+    normalized["post_url_external"] = get_post_link(normalized.get("slug"), external=True) if normalized.get("slug") else None
+    normalized["post_id"] = normalized.get("slug")
     normalized["likes_count"] = len(normalized.get("liked_by", []))
     normalized["likes"] = normalized["likes_count"]
     normalized["liked_by_me"] = bool(
@@ -401,6 +561,12 @@ def normalize_post(post, current_username=None):
         current_username and current_username in normalized.get("saved_by", [])
     )
     normalized["saves_count"] = len(normalized.get("saved_by", []))
+    normalized["watermark_label"] = build_post_watermark(normalized.get("author_username"))
+    normalized["show_saved_watermark"] = bool(
+        current_username
+        and current_username != normalized.get("author_username")
+        and current_username in normalized.get("saved_by", [])
+    )
     comments = normalized.get("comments", [])
     normalized["comments"] = [
         {
@@ -438,11 +604,13 @@ def build_feed_context(current_user):
         ],
         "selected_mood": mood_map.get(selected_mood_value),
         "mood_options": MOOD_OPTIONS,
+        "feed_view_options": FEED_VIEW_OPTIONS,
     }
 
 
 def get_suggested_users(current_username):
     current_user = add_avatar_fields(with_social_defaults(get_current_user() or {}))
+    blocked_usernames = get_blocked_usernames(current_user)
     return [
         enrich_user_card(user, current_user)
         for user in get_db().users.find(
@@ -460,8 +628,10 @@ def get_suggested_users(current_username):
                 "friends": 1,
                 "friend_requests_sent": 1,
                 "friend_requests_received": 1,
+                "blocked_users": 1,
             },
         ).sort("created_at", -1).limit(10)
+        if user.get("username") not in blocked_usernames
     ]
 
 
@@ -471,6 +641,7 @@ def search_users_by_username(query, current_username, limit=8):
         return []
 
     current_user = with_social_defaults(get_current_user() or {})
+    blocked_usernames = get_blocked_usernames(current_user)
     matches = []
     for user in get_db().users.find(
         {"username": {"$ne": current_username}},
@@ -484,9 +655,12 @@ def search_users_by_username(query, current_username, limit=8):
             "friends": 1,
             "friend_requests_sent": 1,
             "friend_requests_received": 1,
+            "blocked_users": 1,
         },
     ).sort("username", 1):
         username = (user or {}).get("username", "")
+        if username in blocked_usernames:
+            continue
         if query in username.lower():
             matches.append(enrich_user_card(user, current_user))
         if len(matches) >= limit:
@@ -522,13 +696,14 @@ def get_incoming_friend_requests(current_username, limit=None):
         if user:
             incoming_requests.append(enrich_user_card(user, current_user))
     return incoming_requests
-
-
-def get_active_stories(limit=12):
+def get_active_stories(limit=12, current_user=None):
     cutoff = datetime.now(timezone.utc).replace(microsecond=0)
     cutoff = cutoff.timestamp() - (24 * 60 * 60)
+    blocked_usernames = get_blocked_usernames(current_user or {})
     stories = []
     for story in get_db().stories.find({}, {"_id": 0}).sort("created_at", -1):
+        if story.get("username") in blocked_usernames:
+            continue
         created_at = story.get("created_at")
         if not created_at or created_at.timestamp() < cutoff:
             continue
@@ -547,18 +722,26 @@ def get_saved_posts_for_user(username, limit=12):
     if not saved_slugs:
         return []
     posts = list(get_db().posts.find({"slug": {"$in": saved_slugs}}, {"_id": 0}))
+    blocked_usernames = get_blocked_usernames(current_user)
     posts_by_slug = {post["slug"]: normalize_post(post, current_user.get("username")) for post in posts}
-    return [posts_by_slug[slug] for slug in saved_slugs if slug in posts_by_slug]
+    return [
+        posts_by_slug[slug]
+        for slug in saved_slugs
+        if slug in posts_by_slug and posts_by_slug[slug].get("author_username") not in blocked_usernames
+    ]
 
 
 def build_navigation_context():
     current_username = session.get("user")
     if not current_username:
         return {"nav_conversations_count": 0, "nav_friend_requests_count": 0}
-    conversations = list(
-        get_db().messages.find({"participants": current_username, "request_status": {"$ne": "pending"}})
-    )
     current_user = with_social_defaults(get_current_user() or {})
+    blocked_usernames = get_blocked_usernames(current_user)
+    conversations = [
+        conversation
+        for conversation in get_db().messages.find({"participants": current_username, "request_status": {"$ne": "pending"}})
+        if all(participant == current_username or participant not in blocked_usernames for participant in conversation.get("participants", []))
+    ]
     return {
         "nav_conversations_count": len(conversations),
         "nav_friend_requests_count": len(current_user.get("friend_requests_received", [])),
@@ -791,6 +974,7 @@ def feed():
             username_query=request.args.get("username", "").strip(),
             incoming_requests=[],
             stories=[],
+            selected_feed_view="all",
             **build_navigation_context(),
         )
 
@@ -799,6 +983,7 @@ def feed():
     mood_map = get_option_map(MOOD_OPTIONS)
     selected_mood = request.args.get("mood", current_user.get("selected_mood"))
     username_query = request.args.get("username", "").strip()
+    selected_feed_view = get_feed_view_value(request.args.get("view", "all"))
 
     if selected_mood in mood_map and selected_mood != current_user.get("selected_mood"):
         db.users.update_one({"username": session["user"]}, {"$set": {"selected_mood": selected_mood}})
@@ -810,9 +995,16 @@ def feed():
     if current_user.get("interests"):
         query["category"] = {"$in": current_user["interests"]}
 
-    posts = list(db.posts.find(query, {"_id": 0}).sort("created_at", -1).limit(40))
+    posts = list(db.posts.find(query, {"_id": 0}).sort("created_at", -1).limit(60))
     if not posts and selected_mood:
-        posts = list(db.posts.find({"mood": selected_mood}, {"_id": 0}).sort("created_at", -1).limit(40))
+        posts = list(db.posts.find({"mood": selected_mood}, {"_id": 0}).sort("created_at", -1).limit(60))
+
+    blocked_usernames = get_blocked_usernames(current_user)
+    posts = [post for post in posts if post.get("author_username") not in blocked_usernames]
+    if selected_feed_view == "user_posts":
+        posts = [post for post in posts if post.get("post_type") == "user"]
+    elif selected_feed_view == "reels":
+        posts = [post for post in posts if post.get("post_type") == "user" and post.get("media_type") == "video"]
 
     posts = [normalize_post(post, session["user"]) for post in posts]
     feed_context = build_feed_context(current_user)
@@ -826,7 +1018,8 @@ def feed():
         searched_users=search_users_by_username(username_query, session["user"]),
         username_query=username_query,
         incoming_requests=get_incoming_friend_requests(session["user"], limit=6),
-        stories=get_active_stories(),
+        stories=get_active_stories(current_user=current_user),
+        selected_feed_view=selected_feed_view,
         **build_navigation_context(),
         **feed_context,
     )
@@ -843,7 +1036,13 @@ def create_story():
     media_payload, media_error = save_uploaded_media(request.files.get("story_media"))
     next_url = request.form.get("next_url") or url_for("feed")
 
+    story_error = validate_clean_copy(caption)
+    if story_error:
+        push_ui_notice("warning", story_error)
+        return redirect(next_url)
+
     if media_error:
+        push_ui_notice("warning", media_error)
         return redirect(next_url)
 
     if not caption and not media_payload:
@@ -906,8 +1105,13 @@ def like_post(slug):
         return redirect(url_for("login"))
 
     db = get_db()
-    post = db.posts.find_one({"slug": slug}, {"liked_by": 1})
+    current_user = with_social_defaults(get_current_user() or {})
+    post = db.posts.find_one({"slug": slug}, {"liked_by": 1, "author_username": 1})
     if post:
+        author_user = with_social_defaults(db.users.find_one({"username": post.get("author_username")}))
+        if is_user_blocked(current_user, author_user):
+            push_ui_notice("warning", "You can’t interact with this post while either user is blocked.")
+            return redirect(request.form.get("next_url") or url_for("feed"))
         liked_by = post.get("liked_by", [])
         if session["user"] in liked_by:
             db.posts.update_one({"slug": slug}, {"$pull": {"liked_by": session["user"]}})
@@ -922,9 +1126,21 @@ def comment_post(slug):
     if "user" not in session:
         return redirect(url_for("login"))
 
+    db = get_db()
+    current_user = with_social_defaults(get_current_user() or {})
+    post = db.posts.find_one({"slug": slug}, {"author_username": 1})
+    author_user = with_social_defaults(db.users.find_one({"username": (post or {}).get("author_username")}))
+    if post and is_user_blocked(current_user, author_user):
+        push_ui_notice("warning", "You can’t comment on this post while either user is blocked.")
+        return redirect(request.form.get("next_url") or url_for("feed"))
+
     content = request.form.get("comment", "").strip()
     if content:
-        get_db().posts.update_one(
+        comment_error = validate_clean_copy(content)
+        if comment_error:
+            push_ui_notice("warning", comment_error)
+            return redirect(request.form.get("next_url") or url_for("feed"))
+        db.posts.update_one(
             {"slug": slug},
             {
                 "$push": {
@@ -947,6 +1163,13 @@ def save_post(slug):
         return redirect(url_for("login"))
 
     db = get_db()
+    current_user = with_social_defaults(get_current_user() or {})
+    post = db.posts.find_one({"slug": slug}, {"author_username": 1})
+    author_user = with_social_defaults(db.users.find_one({"username": (post or {}).get("author_username")}))
+    if post and is_user_blocked(current_user, author_user):
+        push_ui_notice("warning", "You can’t save this post while either user is blocked.")
+        return redirect(request.form.get("next_url") or url_for("feed"))
+
     user = with_social_defaults(db.users.find_one({"username": session["user"]}, {"saved_posts": 1}))
     if not user:
         return redirect(request.form.get("next_url") or url_for("feed"))
@@ -971,11 +1194,12 @@ def follow_user(username):
         return redirect(request.form.get("next_url") or url_for("my_profile"))
 
     db = get_db()
-    current_user = with_social_defaults(db.users.find_one({"username": current_username}, {"blocked_users": 1}))
+    current_user = with_social_defaults(db.users.find_one({"username": current_username}))
     target_user = with_social_defaults(db.users.find_one({"username": username}))
     if not target_user:
         return redirect(url_for("feed"))
-    if username in current_user.get("blocked_users", []):
+    if is_user_blocked(current_user, target_user):
+        push_ui_notice("warning", "This user is blocked, so follow is unavailable.")
         return redirect(request.form.get("next_url") or url_for("profile", username=username))
 
     if current_username in target_user.get("followers", []):
@@ -1000,7 +1224,8 @@ def send_friend_request(username):
     target_user = with_social_defaults(db.users.find_one({"username": username}))
     if not current_user or not target_user:
         return redirect(url_for("feed"))
-    if username in current_user.get("blocked_users", []):
+    if is_user_blocked(current_user, target_user):
+        push_ui_notice("warning", "This user is blocked, so friend requests are unavailable.")
         return redirect(request.form.get("next_url") or url_for("profile", username=username))
 
     if username in current_user.get("friends", []):
@@ -1028,6 +1253,9 @@ def respond_friend_request(username):
     target_user = with_social_defaults(db.users.find_one({"username": username}))
     if not current_user or not target_user:
         return redirect(url_for("feed"))
+    if is_user_blocked(current_user, target_user):
+        push_ui_notice("warning", "This request can’t be completed while either user is blocked.")
+        return redirect(request.form.get("next_url") or url_for("profile", username=username))
 
     if username not in current_user.get("friend_requests_received", []):
         return redirect(request.form.get("next_url") or url_for("profile", username=username))
@@ -1061,6 +1289,11 @@ def profile(username):
 
     profile_error = None
     is_own_profile = username == session["user"]
+    current_user = add_avatar_fields(with_social_defaults(get_current_user() or {}))
+
+    if not is_own_profile and is_user_blocked(current_user, viewed_user):
+        push_ui_notice("warning", "This profile is unavailable because one of you has blocked the other.")
+        return redirect(url_for("feed"))
 
     if request.method == "POST" and is_own_profile:
         title = request.form.get("title", "").strip()
@@ -1070,7 +1303,10 @@ def profile(username):
         language = request.form.get("language", "mixed").strip() or "mixed"
         media_payload, media_error = save_uploaded_media(request.files.get("media"))
 
-        if not content:
+        moderation_error = validate_clean_copy(title, content)
+        if moderation_error:
+            profile_error = moderation_error
+        elif not content:
             profile_error = "Write something before posting."
         elif category not in get_option_map(CATEGORY_OPTIONS):
             profile_error = "Select a valid category."
@@ -1100,13 +1336,13 @@ def profile(username):
             if media_payload:
                 post_doc.update(media_payload)
             db.posts.insert_one(post_doc)
+            push_ui_notice("success", "Post published.")
             return redirect(url_for("profile", username=username))
 
     posts = list(db.posts.find({"author_username": username}, {"_id": 0}).sort("created_at", -1).limit(30))
     posts = [normalize_post(post, session["user"]) for post in posts]
     saved_posts = get_saved_posts_for_user(username) if is_own_profile else []
     context = build_feed_context(viewed_user)
-    current_user = add_avatar_fields(with_social_defaults(get_current_user() or {}))
     relationship = build_relationship_state(current_user, viewed_user)
     follower_users = [
         add_avatar_fields(
@@ -1133,7 +1369,7 @@ def profile(username):
         visible_follower_users=visible_follower_users,
         saved_posts=saved_posts,
         incoming_requests=get_incoming_friend_requests(session["user"]),
-        stories=get_active_stories(),
+        stories=get_active_stories(current_user=current_user),
         **build_navigation_context(),
         **context,
     )
@@ -1253,6 +1489,7 @@ def messages_index():
     db = get_db()
     current_username = session["user"]
     current_user = with_social_defaults(db.users.find_one({"username": current_username}))
+    blocked_usernames = get_blocked_usernames(current_user)
     threads = list(db.messages.find({"participants": current_username}).sort("updated_at", -1))
 
     conversations = []
@@ -1261,11 +1498,11 @@ def messages_index():
         other_user = next((name for name in thread.get("participants", []) if name != current_username), None)
         if not other_user:
             continue
-        if other_user in current_user.get("blocked_users", []):
+        if other_user in blocked_usernames:
             continue
         user_doc = db.users.find_one(
             {"username": other_user},
-            {"username": 1, "avatar": 1, "avatar_file_id": 1, "avatar_filename": 1},
+            {"username": 1, "avatar": 1, "avatar_file_id": 1, "avatar_filename": 1, "blocked_users": 1},
         )
         user_doc = add_avatar_fields(user_doc)
         preview = normalize_conversation_preview(thread, current_username, user_doc)
@@ -1302,7 +1539,8 @@ def messages_chat(username):
     target_user = add_avatar_fields(with_social_defaults(db.users.find_one({"username": username})))
     if not target_user:
         return redirect(url_for("messages_index"))
-    if username in current_user.get("blocked_users", []):
+    if is_user_blocked(current_user, target_user):
+        push_ui_notice("warning", "This chat is unavailable because one of you has blocked the other.")
         return redirect(url_for("messages_index"))
     target_user["is_active"] = is_user_active(target_user)
     target_user["last_seen_label"] = format_last_seen_label(target_user)
@@ -1319,15 +1557,16 @@ def messages_chat(username):
             return redirect(url_for("messages_chat", username=username))
         content = request.form.get("content", "").strip()
         if content:
+            moderated_content, warning = moderate_chat_copy(content)
             message_doc = {
                 "id": uuid4().hex,
                 "sender": current_username,
                 "receiver": username,
-                "content": content,
+                "content": moderated_content,
                 "created_at": datetime.now(timezone.utc),
             }
             update_payload = {
-                "$set": {"updated_at": message_doc["created_at"], "last_message": content},
+                "$set": {"updated_at": message_doc["created_at"], "last_message": moderated_content},
                 "$setOnInsert": {"participants": participants},
                 "$push": {"messages": message_doc},
             }
@@ -1336,9 +1575,12 @@ def messages_chat(username):
                     {"request_status": "pending", "request_sender": current_username}
                 )
             db.messages.update_one({"participants": participants}, update_payload, upsert=True)
+            if warning:
+                push_ui_notice("warning", warning)
         return redirect(url_for("messages_chat", username=username))
 
     threads = list(db.messages.find({"participants": current_username}).sort("updated_at", -1))
+    blocked_usernames = get_blocked_usernames(current_user)
     conversations = []
     message_requests = []
     active_messages = []
@@ -1346,11 +1588,11 @@ def messages_chat(username):
         other_user = next((name for name in thread.get("participants", []) if name != current_username), None)
         if not other_user:
             continue
-        if other_user in current_user.get("blocked_users", []):
+        if other_user in blocked_usernames:
             continue
         user_doc = db.users.find_one(
             {"username": other_user},
-            {"username": 1, "avatar": 1, "avatar_file_id": 1, "avatar_filename": 1},
+            {"username": 1, "avatar": 1, "avatar_file_id": 1, "avatar_filename": 1, "blocked_users": 1},
         )
         user_doc = add_avatar_fields(user_doc)
         preview = normalize_conversation_preview(thread, current_username, user_doc)
@@ -1396,6 +1638,11 @@ def respond_message_request(username):
     current_username = session["user"]
     action = request.form.get("action", "").strip().lower()
     thread = get_message_thread(current_username, username)
+    current_user = with_social_defaults(get_db().users.find_one({"username": current_username}))
+    target_user = with_social_defaults(get_db().users.find_one({"username": username}))
+    if is_user_blocked(current_user, target_user):
+        push_ui_notice("warning", "This request can’t be updated while either user is blocked.")
+        return redirect(url_for("messages_index"))
     if not thread or thread.get("request_status") != "pending" or thread.get("request_sender") != username:
         return redirect(url_for("messages_index"))
 
@@ -1408,6 +1655,43 @@ def respond_message_request(username):
         get_db().messages.delete_one({"participants": sorted([current_username, username])})
 
     return redirect(request.form.get("next_url") or url_for("messages_index"))
+
+
+@app.route("/guidelines")
+def guidelines():
+    if "user" not in session:
+        return redirect(url_for("login"))
+    return render_template(
+        "guidelines.html",
+        current_user=add_avatar_fields(with_social_defaults(get_current_user() or {})),
+        policy_sections=CONTENT_POLICY_SECTIONS,
+        **build_navigation_context(),
+    )
+
+
+@app.route("/posts/<slug>")
+def post_detail(slug):
+    if "user" not in session:
+        return redirect(url_for("login"))
+
+    current_user = add_avatar_fields(with_social_defaults(get_current_user() or {}))
+    post = get_db().posts.find_one({"slug": slug}, {"_id": 0})
+    if not post:
+        abort(404)
+
+    author_user = with_social_defaults(get_db().users.find_one({"username": post.get("author_username")}))
+    if author_user and is_user_blocked(current_user, author_user):
+        push_ui_notice("warning", "This post is unavailable because one of you has blocked the other.")
+        return redirect(url_for("feed"))
+
+    normalized_post = normalize_post(post, current_user.get("username"))
+    return render_template(
+        "post_detail.html",
+        current_user=current_user,
+        post=normalized_post,
+        author=enrich_user_card(author_user, current_user) if author_user else None,
+        **build_navigation_context(),
+    )
 
 
 @app.route("/profile/<username>/report", methods=["POST"])
@@ -1451,6 +1735,7 @@ def block_user(username):
 
     if username in current_user.get("blocked_users", []):
         db.users.update_one({"username": current_username}, {"$pull": {"blocked_users": username}})
+        push_ui_notice("success", f"@{username} was unblocked.")
     else:
         db.users.update_one(
             {"username": current_username},
@@ -1474,6 +1759,8 @@ def block_user(username):
                 }
             },
         )
+        db.messages.delete_one({"participants": sorted([current_username, username])})
+        push_ui_notice("success", f"@{username} was blocked.")
 
     return redirect(request.form.get("next_url") or url_for("profile", username=username))
 
